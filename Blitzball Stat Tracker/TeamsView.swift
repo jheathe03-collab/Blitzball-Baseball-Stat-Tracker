@@ -88,7 +88,7 @@ struct TeamsView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: { team in
-            Text("Are you sure you want to delete \u{201C}\(team.name)\u{201D}? This can't be undone. (Players stay in your Players list.)")
+            Text("Are you sure you want to delete \u{201C}\(team.name)\u{201D}? This cannot be undone. (Players stay in your Players list.)")
         }
     }
 

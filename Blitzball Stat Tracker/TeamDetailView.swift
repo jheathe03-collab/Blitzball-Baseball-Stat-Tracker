@@ -80,7 +80,7 @@ struct TeamDetailView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: { player in
-            Text("Remove \(player.name) from \(team.name)? They'll stay in your Players list and keep their stats.")
+            Text("Remove \(player.name) from \(team.name)? They will stay in your Players list and keep their stats.")
         }
     }
 

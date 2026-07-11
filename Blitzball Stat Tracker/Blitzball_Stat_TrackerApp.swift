@@ -14,6 +14,7 @@ struct Blitzball_Stat_TrackerApp: App {
         let schema = Schema([
             Player.self,
             Team.self,
+            Game.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
