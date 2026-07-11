@@ -15,8 +15,13 @@ public struct PitchingStats: Codable, Hashable, Sendable {
     public var outsRecorded: Int
     /// Earned runs allowed (runs that scored without the help of an error).
     public var earnedRuns: Int
+    /// Total runs allowed (the box-score "R"). For now every run counts as earned, so this
+    /// moves in lockstep with earnedRuns.
+    public var runsAllowed: Int
     /// Hits allowed.
     public var hitsAllowed: Int
+    /// Home runs allowed.
+    public var homeRunsAllowed: Int
     /// Walks allowed.
     public var walksAllowed: Int
     /// Strikeouts recorded.
@@ -31,7 +36,9 @@ public struct PitchingStats: Codable, Hashable, Sendable {
     public init(
         outsRecorded: Int = 0,
         earnedRuns: Int = 0,
+        runsAllowed: Int = 0,
         hitsAllowed: Int = 0,
+        homeRunsAllowed: Int = 0,
         walksAllowed: Int = 0,
         strikeouts: Int = 0,
         atBatsAgainst: Int = 0,
@@ -40,7 +47,9 @@ public struct PitchingStats: Codable, Hashable, Sendable {
     ) {
         self.outsRecorded = outsRecorded
         self.earnedRuns = earnedRuns
+        self.runsAllowed = runsAllowed
         self.hitsAllowed = hitsAllowed
+        self.homeRunsAllowed = homeRunsAllowed
         self.walksAllowed = walksAllowed
         self.strikeouts = strikeouts
         self.atBatsAgainst = atBatsAgainst
@@ -91,7 +100,9 @@ extension PitchingStats {
         PitchingStats(
             outsRecorded: lhs.outsRecorded + rhs.outsRecorded,
             earnedRuns: lhs.earnedRuns + rhs.earnedRuns,
+            runsAllowed: lhs.runsAllowed + rhs.runsAllowed,
             hitsAllowed: lhs.hitsAllowed + rhs.hitsAllowed,
+            homeRunsAllowed: lhs.homeRunsAllowed + rhs.homeRunsAllowed,
             walksAllowed: lhs.walksAllowed + rhs.walksAllowed,
             strikeouts: lhs.strikeouts + rhs.strikeouts,
             atBatsAgainst: lhs.atBatsAgainst + rhs.atBatsAgainst,

@@ -32,6 +32,10 @@ final class Player {
     /// other side of this relationship. Defaults to empty, so the initializer below ignores it.
     @Relationship(inverse: \Team.players) var teams: [Team] = []
 
+    /// Every per-game stat line for this player. (Inverse of `GameStatLine.player`.) A player's
+    /// career stats will be the sum of these once we wire the rollup.
+    var gameStatLines: [GameStatLine] = []
+
     /// When this player was added. Handy for sorting the list by "newest first" later.
     var dateAdded: Date
 

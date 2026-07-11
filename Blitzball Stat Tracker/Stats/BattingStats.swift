@@ -28,6 +28,8 @@ public struct BattingStats: Codable, Hashable, Sendable {
     public var homeRuns: Int
     /// Runs batted in. A pure counting stat (not used by AVG/OBP/SLG) that we track and total.
     public var rbi: Int
+    /// Runs scored by this batter (the box-score "R"). A counting stat we track and total.
+    public var runsScored: Int
     /// Walks (bases on balls).
     public var walks: Int
     /// Times hit by a pitch.
@@ -47,6 +49,7 @@ public struct BattingStats: Codable, Hashable, Sendable {
         triples: Int = 0,
         homeRuns: Int = 0,
         rbi: Int = 0,
+        runsScored: Int = 0,
         walks: Int = 0,
         hitByPitch: Int = 0,
         strikeouts: Int = 0,
@@ -59,6 +62,7 @@ public struct BattingStats: Codable, Hashable, Sendable {
         self.triples = triples
         self.homeRuns = homeRuns
         self.rbi = rbi
+        self.runsScored = runsScored
         self.walks = walks
         self.hitByPitch = hitByPitch
         self.strikeouts = strikeouts
@@ -125,6 +129,7 @@ extension BattingStats {
             triples: lhs.triples + rhs.triples,
             homeRuns: lhs.homeRuns + rhs.homeRuns,
             rbi: lhs.rbi + rhs.rbi,
+            runsScored: lhs.runsScored + rhs.runsScored,
             walks: lhs.walks + rhs.walks,
             hitByPitch: lhs.hitByPitch + rhs.hitByPitch,
             strikeouts: lhs.strikeouts + rhs.strikeouts,

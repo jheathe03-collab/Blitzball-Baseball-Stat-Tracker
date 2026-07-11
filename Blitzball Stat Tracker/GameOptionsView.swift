@@ -40,6 +40,7 @@ struct GameOptionsView: View {
                         value: $game.settings.maxBalls, in: GameSettings.ballsRange)
 
                 Toggle("Ghost Runners", isOn: $game.settings.ghostRunners)
+                Toggle("HBP Walks", isOn: $game.settings.hbpWalks)
 
                 Stepper("Challenges: \(game.settings.challenges)",
                         value: $game.settings.challenges, in: GameSettings.challengesRange)

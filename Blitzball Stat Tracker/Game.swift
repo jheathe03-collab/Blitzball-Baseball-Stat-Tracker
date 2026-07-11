@@ -37,6 +37,35 @@ final class Game {
     /// struct, the same way Player stores its BattingStats. New games start on Blitzball defaults.
     var settings: GameSettings
 
+    // MARK: - Live game state (meaningful once the game is in progress)
+
+    /// 1-based inning number.
+    var currentInning: Int = 1
+    /// Top of the inning = away team batting (home fields); bottom = home bats.
+    var isTopInning: Bool = true
+    /// Outs in the current half-inning (0...3).
+    var outs: Int = 0
+    /// Runs scored per inning by each side; index = inning - 1. Their sums are the scoreboard R.
+    var awayInningRuns: [Int] = []
+    var homeInningRuns: [Int] = []
+    /// Which lineup spot is up next for each side (auto-advances after each plate appearance).
+    var homeBatterIndex: Int = 0
+    var awayBatterIndex: Int = 0
+
+    /// The current pitcher for each side. The ACTIVE pitcher is the fielding side's — home
+    /// pitches during the top of the inning, away during the bottom.
+    @Relationship var homePitcher: Player?
+    @Relationship var awayPitcher: Player?
+
+    /// Ghost runners currently on base (only the batting team has runners). Cleared each
+    /// half-inning. Access them positionally via the `bases` helper in Game+Live.
+    @Relationship var runnerFirst: Player?
+    @Relationship var runnerSecond: Player?
+    @Relationship var runnerThird: Player?
+
+    /// Every player's stat line for this game. Deleting the game deletes its lines (cascade).
+    @Relationship(deleteRule: .cascade, inverse: \GameStatLine.game) var statLines: [GameStatLine] = []
+
     init(
         createdAt: Date = .now,
         status: GameStatus = .setup,
@@ -50,4 +79,10 @@ final class Game {
         self.awayTeam = awayTeam
         self.settings = settings
     }
+}
+
+extension Game {
+    /// Scoreboard run totals, summed from the per-inning arrays.
+    var awayScore: Int { awayInningRuns.reduce(0, +) }
+    var homeScore: Int { homeInningRuns.reduce(0, +) }
 }

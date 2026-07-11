@@ -97,9 +97,9 @@ struct SelectTeamsView: View {
                     }
                 }
 
-                // Gated until both teams are chosen. Placeholder destination for now.
+                // Gated until both teams are chosen. Opens the live game screen.
                 NavigationLink {
-                    ComingSoonView(title: "Start Game", systemImage: "baseball.fill")
+                    LiveGameView(game: game)
                 } label: {
                     Label("Start Game", systemImage: "play.fill")
                         .fontWeight(.semibold)
