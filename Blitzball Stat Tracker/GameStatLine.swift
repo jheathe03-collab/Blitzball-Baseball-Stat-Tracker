@@ -21,6 +21,10 @@ final class GameStatLine {
     /// Still in the game? (Used when we add substitutions later.)
     var isActive: Bool
 
+    /// True for the neutral Designated Hitter's single shared line (belongs to neither team;
+    /// bats in both lineups). Kept out of team totals so DH stats stay personal-only.
+    var isDH: Bool = false
+
     /// This player's batting and pitching for this game only.
     var batting: BattingStats
     var pitching: PitchingStats
@@ -36,6 +40,7 @@ final class GameStatLine {
         isHome: Bool,
         battingOrder: Int,
         isActive: Bool = true,
+        isDH: Bool = false,
         batting: BattingStats = BattingStats(),
         pitching: PitchingStats = PitchingStats()
     ) {
@@ -43,6 +48,7 @@ final class GameStatLine {
         self.isHome = isHome
         self.battingOrder = battingOrder
         self.isActive = isActive
+        self.isDH = isDH
         self.batting = batting
         self.pitching = pitching
     }

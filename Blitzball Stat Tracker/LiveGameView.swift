@@ -24,6 +24,9 @@ struct LiveGameView: View {
 
     // In-memory Undo history: a snapshot is pushed before each play, capped to the last 100.
     @State private var undoStack: [GameSnapshot] = []
+    // A blocked pitcher change (All-Team-Pitch), held to offer an injury override.
+    @State private var pitcherChangeError: String?
+    @State private var pendingPitcher: Player?
 
     var body: some View {
         // Once the game is over, this same screen becomes the box score.
@@ -59,6 +62,7 @@ struct LiveGameView: View {
         }
         .navigationTitle("Live Game")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)   // no exit mid-game except End Game
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button { undo() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
@@ -71,19 +75,31 @@ struct LiveGameView: View {
             withAnimation(.easeInOut(duration: 0.4)) { showSplash = false }
         }
         .sheet(isPresented: $showBatterPicker) {
-            LinePicker(title: "Select Batter", lines: game.battingLineup) { line in
+            LinePicker(title: "Select Batter", lines: game.battingLineup,
+                       subtitle: game.currentBatterLine.map { "Current Batter: \($0.player?.name ?? "—")" },
+                       selectedPlayer: game.currentBatterLine?.player) { line in
                 if let idx = game.battingLineup.firstIndex(where: { $0 === line }) {
                     game.currentBatterIndex = idx
                 }
             }
         }
         .sheet(isPresented: $showPitcherPicker) {
-            LinePicker(title: "Select Pitcher", lines: game.lineup(isHome: !game.battingIsHome)) { line in
-                game.activePitcher = line.player
+            LinePicker(title: "Select Pitcher", lines: game.lineup(isHome: !game.battingIsHome),
+                       subtitle: game.activePitcher.map { "Current Pitcher: \($0.name)" },
+                       selectedPlayer: game.activePitcher) { line in
+                if let player = line.player { attemptPitcherChange(player) }
             }
         }
         .sheet(isPresented: $showSubstitution) {
             SubstitutionView(game: game)
+        }
+        .alert("Can't Swap Pitcher", isPresented: pitcherChangeAlert, presenting: pitcherChangeError) { _ in
+            Button("Override (injury)") {
+                if let player = pendingPitcher { _ = game.changePitcher(to: player, override: true) }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { message in
+            Text(message)
         }
         .sheet(item: $editingBase) { selection in
             BaseEditorSheet(
@@ -99,7 +115,12 @@ struct LiveGameView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This finishes the game. You can review it in the Game Summary.")
+            let unpitched = game.playersWhoHaventPitched()
+            if unpitched.isEmpty {
+                Text("This finishes the game. You can review it in the Game Summary.")
+            } else {
+                Text("These players haven't pitched yet: \(unpitched.map(\.name).joined(separator: ", ")). End the game anyway?")
+            }
         }
     }
 
@@ -115,6 +136,18 @@ struct LiveGameView: View {
     private func undo() {
         guard let snapshot = undoStack.popLast() else { return }
         game.restore(from: snapshot)
+    }
+
+    private func attemptPitcherChange(_ player: Player) {
+        if let error = game.changePitcher(to: player, override: false) {
+            pendingPitcher = player
+            pitcherChangeError = error
+        }
+    }
+
+    private var pitcherChangeAlert: Binding<Bool> {
+        Binding(get: { pitcherChangeError != nil },
+                set: { if !$0 { pitcherChangeError = nil } })
     }
 
     private func adjustInningRuns(isHome: Bool, inning index: Int, delta: Int) {
@@ -144,6 +177,9 @@ struct LiveGameView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Up To Bat").font(.headline)
+                if let name = game.battingTeam?.name {
+                    Text(name).font(.subheadline).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Select Batter") { showBatterPicker = true }.font(.subheadline)
             }
@@ -173,8 +209,17 @@ struct LiveGameView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Pitching").font(.headline)
+                if let name = game.fieldingTeam?.name {
+                    Text(name).font(.subheadline).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Select Pitcher") { showPitcherPicker = true }.font(.subheadline)
+            }
+
+            if game.settings.allTeamPitch {
+                Text("Pitching changes — \(game.homeTeam?.name ?? "Home"): \(game.homePitchingSwaps)/2 · \(game.awayTeam?.name ?? "Away"): \(game.awayPitchingSwaps)/2")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if let pitcherLine = game.activePitcherLine {
@@ -227,19 +272,10 @@ struct LiveGameView: View {
     private func startIfNeeded() {
         guard game.status == .setup else { return }
 
-        let homePlayers = (game.homeTeam?.players ?? []).sorted { $0.name < $1.name }
-        let awayPlayers = (game.awayTeam?.players ?? []).sorted { $0.name < $1.name }
-
-        for (i, player) in homePlayers.enumerated() {
-            let line = GameStatLine(player: player, isHome: true, battingOrder: i)
-            line.game = game
-            modelContext.insert(line)
-        }
-        for (i, player) in awayPlayers.enumerated() {
-            let line = GameStatLine(player: player, isHome: false, battingOrder: i)
-            line.game = game
-            modelContext.insert(line)
-        }
+        // Build/refresh both lineups — this preserves any custom batting order set on Select Teams.
+        game.syncLineup(isHome: true, using: modelContext)
+        game.syncLineup(isHome: false, using: modelContext)
+        game.syncDesignatedHitter(using: modelContext)
 
         game.currentInning = 1
         game.isTopInning = true
@@ -248,11 +284,20 @@ struct LiveGameView: View {
         game.homeInningRuns = [0]
         game.homeBatterIndex = 0
         game.awayBatterIndex = 0
+        game.homePitchingSwaps = 0
+        game.awayPitchingSwaps = 0
+        game.homePitcherOuts = 0
+        game.awayPitcherOuts = 0
         game.runnerFirst = nil
         game.runnerSecond = nil
         game.runnerThird = nil
-        game.homePitcher = homePlayers.first
-        game.awayPitcher = awayPlayers.first
+        // Honor a starting pitcher chosen on Select Teams; otherwise default to the leadoff spot.
+        if game.homePitcher == nil || !game.lineup(isHome: true).contains(where: { $0.player === game.homePitcher }) {
+            game.homePitcher = game.lineup(isHome: true).first?.player
+        }
+        if game.awayPitcher == nil || !game.lineup(isHome: false).contains(where: { $0.player === game.awayPitcher }) {
+            game.awayPitcher = game.lineup(isHome: false).first?.player
+        }
         game.status = .inProgress
     }
 }
@@ -371,6 +416,11 @@ private struct PitcherCounters: View {
             StatStepper(label: "HR", value: $line.pitching.homeRunsAllowed)
             StatStepper(label: "Walks", value: $line.pitching.walksAllowed)
             StatStepper(label: "Strikeouts", value: $line.pitching.strikeouts)
+            // In-play outs (outs that aren't strikeouts). Editing keeps total outs = Outs + K.
+            StatStepper(label: "Outs", value: Binding(
+                get: { line.pitching.outsRecorded - line.pitching.strikeouts },
+                set: { line.pitching.outsRecorded = line.pitching.strikeouts + max(0, $0) }
+            ))
         }
     }
 }
@@ -396,15 +446,35 @@ private struct StatStepper: View {
 private struct LinePicker: View {
     let title: String
     let lines: [GameStatLine]
+    var subtitle: String? = nil
+    var selectedPlayer: Player? = nil
     let onSelect: (GameStatLine) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
-            List(lines) { line in
-                Button(line.player?.name ?? "—") {
-                    onSelect(line)
-                    dismiss()
+            VStack(alignment: .leading, spacing: 0) {
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
+                List(lines) { line in
+                    Button {
+                        onSelect(line)
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text(line.player?.name ?? "—")
+                            Spacer()
+                            if line.player === selectedPlayer {
+                                Image(systemName: "lock.fill").foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .disabled(line.player === selectedPlayer)
                 }
             }
             .navigationTitle(title)

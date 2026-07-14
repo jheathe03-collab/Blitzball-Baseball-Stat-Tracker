@@ -52,6 +52,13 @@ final class Game {
     var homeBatterIndex: Int = 0
     var awayBatterIndex: Int = 0
 
+    // All-Team-Pitch bookkeeping (per side): pitching changes used (capped at 2, override-free
+    // changes don't count) and the current pitcher's outs this stint (>=1 needed to swap out).
+    var homePitchingSwaps: Int = 0
+    var awayPitchingSwaps: Int = 0
+    var homePitcherOuts: Int = 0
+    var awayPitcherOuts: Int = 0
+
     /// The current pitcher for each side. The ACTIVE pitcher is the fielding side's — home
     /// pitches during the top of the inning, away during the bottom.
     @Relationship var homePitcher: Player?
@@ -62,6 +69,10 @@ final class Game {
     @Relationship var runnerFirst: Player?
     @Relationship var runnerSecond: Player?
     @Relationship var runnerThird: Player?
+
+    /// The neutral shared Designated Hitter for this game (when the DH option is on). Belongs to
+    /// neither team; bats in both lineups and can pitch for either. Stats stay personal-only.
+    @Relationship var designatedHitter: Player?
 
     /// Every player's stat line for this game. Deleting the game deletes its lines (cascade).
     @Relationship(deleteRule: .cascade, inverse: \GameStatLine.game) var statLines: [GameStatLine] = []

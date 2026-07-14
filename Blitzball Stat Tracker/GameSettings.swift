@@ -39,6 +39,8 @@ struct GameSettings: Codable, Hashable, Sendable {
     /// Does a hit-by-pitch put the batter on base (walk-style)? Off by default in blitzball.
     var hbpWalks: Bool
     var challenges: Int       // 0...3
+    /// A neutral shared player who bats for both teams (for odd rosters). Off by default; opt-in.
+    var designatedHitter: Bool
 
     // Allowed ranges, kept next to the data so the UI steppers can reuse them.
     static let inningsRange = 1...9
@@ -49,11 +51,13 @@ struct GameSettings: Codable, Hashable, Sendable {
     // The two presets (from James's mockup).
     static let blitzballDefaults = GameSettings(
         innings: 7, extraInnings: true, substitutions: true, allTeamPitch: true,
-        maxStrikes: 3, maxBalls: 6, ghostRunners: true, hbpWalks: false, challenges: 0
+        maxStrikes: 3, maxBalls: 6, ghostRunners: true, hbpWalks: false, challenges: 0,
+        designatedHitter: false
     )
     static let baseballDefaults = GameSettings(
         innings: 9, extraInnings: true, substitutions: true, allTeamPitch: true,
-        maxStrikes: 3, maxBalls: 4, ghostRunners: false, hbpWalks: true, challenges: 2
+        maxStrikes: 3, maxBalls: 4, ghostRunners: false, hbpWalks: true, challenges: 2,
+        designatedHitter: false
     )
 
     /// Which preset the current values match — or `.custom` if they match neither. Because this

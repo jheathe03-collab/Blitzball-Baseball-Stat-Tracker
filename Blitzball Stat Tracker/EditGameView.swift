@@ -14,10 +14,13 @@ struct EditGameView: View {
     @Bindable var game: Game
 
     private var awayLines: [GameStatLine] {
-        game.statLines.filter { !$0.isHome }.sorted { $0.battingOrder < $1.battingOrder }
+        game.statLines.filter { !$0.isHome && !$0.isDH }.sorted { $0.battingOrder < $1.battingOrder }
     }
     private var homeLines: [GameStatLine] {
-        game.statLines.filter { $0.isHome }.sorted { $0.battingOrder < $1.battingOrder }
+        game.statLines.filter { $0.isHome && !$0.isDH }.sorted { $0.battingOrder < $1.battingOrder }
+    }
+    private var dhLines: [GameStatLine] {
+        game.statLines.filter { $0.isDH }
     }
 
     var body: some View {
@@ -40,6 +43,7 @@ struct EditGameView: View {
 
             playersSection(title: game.awayTeam?.name ?? "Away", lines: awayLines)
             playersSection(title: game.homeTeam?.name ?? "Home", lines: homeLines)
+            playersSection(title: "Designated Hitter", lines: dhLines)
         }
         .navigationTitle("Edit Stats & Score")
         .navigationBarTitleDisplayMode(.inline)

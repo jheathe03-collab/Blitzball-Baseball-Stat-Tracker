@@ -24,7 +24,7 @@ struct SubstitutionView: View {
     /// Active players on a side, in batting order.
     private func activeLines(isHome: Bool) -> [GameStatLine] {
         game.statLines
-            .filter { $0.isActive && $0.isHome == isHome }
+            .filter { $0.isActive && !$0.isDH && $0.isHome == isHome }
             .sorted { $0.battingOrder < $1.battingOrder }
     }
 

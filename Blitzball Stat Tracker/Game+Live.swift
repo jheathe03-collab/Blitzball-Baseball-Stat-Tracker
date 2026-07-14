@@ -21,10 +21,16 @@ extension Game {
     var fieldingTeam: Team? { battingIsHome ? awayTeam : homeTeam }
 
     /// Active players on a side, in batting order.
-    func lineup(isHome: Bool) -> [GameStatLine] {
+    /// The team's OWN active batters on a side (excludes the neutral DH), in batting order.
+    func teamLineup(isHome: Bool) -> [GameStatLine] {
         statLines
-            .filter { $0.isHome == isHome && $0.isActive }
+            .filter { $0.isHome == isHome && $0.isActive && !$0.isDH }
             .sorted { $0.battingOrder < $1.battingOrder }
+    }
+
+    /// The full batting order for a side: the team's batters, plus the shared DH batting last.
+    func lineup(isHome: Bool) -> [GameStatLine] {
+        teamLineup(isHome: isHome) + statLines.filter { $0.isActive && $0.isDH }
     }
 
     var battingLineup: [GameStatLine] { lineup(isHome: battingIsHome) }
@@ -49,7 +55,55 @@ extension Game {
 
     var activePitcherLine: GameStatLine? {
         guard let pitcher = activePitcher else { return nil }
-        return statLines.first { $0.player === pitcher && $0.isHome != battingIsHome }
+        // Match the fielding side's line, or the shared DH's line if the DH is pitching.
+        return statLines.first { $0.player === pitcher && ($0.isDH || $0.isHome != battingIsHome) }
+    }
+
+    // MARK: - All-Team-Pitch (pitching-change rules)
+
+    /// The fielding side's current-pitcher outs this stint.
+    var activePitcherOuts: Int {
+        get { battingIsHome ? awayPitcherOuts : homePitcherOuts }
+        set { if battingIsHome { awayPitcherOuts = newValue } else { homePitcherOuts = newValue } }
+    }
+
+    /// The fielding side's pitching changes used (cap 2).
+    var activePitcherSwaps: Int {
+        get { battingIsHome ? awayPitchingSwaps : homePitchingSwaps }
+        set { if battingIsHome { awayPitchingSwaps = newValue } else { homePitchingSwaps = newValue } }
+    }
+
+    /// Change the active (fielding) pitcher. With All-Team-Pitch on, requires the current pitcher
+    /// to have >=1 out this stint and enforces the 2-swap cap — unless `override` (injury) is set.
+    /// Returns an error message if blocked, or nil on success.
+    func changePitcher(to newPlayer: Player, override: Bool) -> String? {
+        guard settings.allTeamPitch else { activePitcher = newPlayer; return nil }
+        guard newPlayer !== activePitcher else { return nil }
+        if !override {
+            if activePitcherOuts < 1 {
+                return "Player needs a K or Out to swap out."
+            }
+            if activePitcherSwaps >= 2 {
+                return "This team has already used its 2 pitching changes. Use Override for an injury."
+            }
+        }
+        activePitcher = newPlayer
+        activePitcherOuts = 0
+        if !override { activePitcherSwaps += 1 }
+        return nil
+    }
+
+    /// Team players (both sides, not the DH) who haven't pitched yet — for the End Game warning.
+    func playersWhoHaventPitched() -> [Player] {
+        guard settings.allTeamPitch else { return [] }
+        var result: [Player] = []
+        for line in statLines where !line.isDH {
+            guard let player = line.player else { continue }
+            let pitched = line.pitching != PitchingStats()
+                || player === homePitcher || player === awayPitcher
+            if !pitched { result.append(player) }
+        }
+        return result
     }
 
     // MARK: - Bases (index 0/1/2 = 1st/2nd/3rd)
@@ -125,7 +179,11 @@ extension Game {
             }
         }
 
-        if outcome.isOut { outs += 1 }
+        if outcome.isOut {
+            outs += 1
+            // Credit the fielding pitcher's current stint (for the All-Team-Pitch swap rule).
+            if battingIsHome { awayPitcherOuts += 1 } else { homePitcherOuts += 1 }
+        }
         advanceBatter()
         if outs >= 3 { advanceHalfInning() }
     }
@@ -210,7 +268,7 @@ extension Game {
 
     /// Total hits by a side (for the line score's H column), summed from that side's lines.
     func hits(isHome: Bool) -> Int {
-        statLines.filter { $0.isHome == isHome }.reduce(0) { $0 + $1.batting.hits }
+        statLines.filter { !$0.isDH && $0.isHome == isHome }.reduce(0) { $0 + $1.batting.hits }
     }
 
     /// The half-inning label, e.g. "Top 3" / "Bot 5".

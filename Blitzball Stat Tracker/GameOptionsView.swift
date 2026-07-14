@@ -41,6 +41,7 @@ struct GameOptionsView: View {
 
                 Toggle("Ghost Runners", isOn: $game.settings.ghostRunners)
                 Toggle("HBP Walks", isOn: $game.settings.hbpWalks)
+                Toggle("Designated Hitter", isOn: $game.settings.designatedHitter)
 
                 Stepper("Challenges: \(game.settings.challenges)",
                         value: $game.settings.challenges, in: GameSettings.challengesRange)

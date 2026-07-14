@@ -15,11 +15,16 @@ struct GameSummaryView: View {
     @State private var showingHome = true
     @Environment(Router.self) private var router
 
-    /// All of the selected team's lines, in batting order (includes subs, active or not).
+    /// The selected team's lines, in batting order (includes subs; excludes the neutral DH).
     private var lines: [GameStatLine] {
         game.statLines
-            .filter { $0.isHome == showingHome }
+            .filter { $0.isHome == showingHome && !$0.isDH }
             .sorted { $0.battingOrder < $1.battingOrder }
+    }
+
+    /// The shared Designated Hitter's line(s), shown separately (stats aren't a team's).
+    private var dhLines: [GameStatLine] {
+        game.statLines.filter { $0.isDH }
     }
 
     var body: some View {
@@ -41,6 +46,16 @@ struct GameSummaryView: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                 } else {
                     PitchingBox(lines: pitchers)
+                }
+
+                // The neutral Designated Hitter — kept separate so its stats aren't a team's.
+                if !dhLines.isEmpty {
+                    Text("Designated Hitter").font(.headline)
+                    BattingBox(lines: dhLines, showTotals: false)
+                    let dhPitchers = dhLines.filter { $0.pitching.outsRecorded > 0 }
+                    if !dhPitchers.isEmpty {
+                        PitchingBox(lines: dhPitchers, showTotals: false)
+                    }
                 }
 
                 // After a game ends, offer a one-tap return to the menu.
@@ -66,6 +81,7 @@ struct GameSummaryView: View {
 
 private struct BattingBox: View {
     let lines: [GameStatLine]
+    var showTotals: Bool = true
 
     private let headers = ["AB", "R", "H", "RBI", "BB", "K", "AVG", "OPS"]
     private var totals: BattingStats {
@@ -85,7 +101,7 @@ private struct BattingBox: View {
                     row(name: line.player?.name ?? "—", b: line.batting, bold: false)
                 }
 
-                if !lines.isEmpty {
+                if showTotals && !lines.isEmpty {
                     Divider().gridCellColumns(headers.count + 1)
                     row(name: "TEAM", b: totals, bold: true)
                 }
@@ -114,6 +130,7 @@ private struct BattingBox: View {
 
 private struct PitchingBox: View {
     let lines: [GameStatLine]
+    var showTotals: Bool = true
 
     private let headers = ["IP", "H", "R", "ER", "BB", "K", "HR", "ERA"]
     private var totals: PitchingStats {
@@ -133,7 +150,7 @@ private struct PitchingBox: View {
                     row(name: line.player?.name ?? "—", p: line.pitching, bold: false)
                 }
 
-                if !lines.isEmpty {
+                if showTotals && !lines.isEmpty {
                     Divider().gridCellColumns(headers.count + 1)
                     row(name: "TEAM", p: totals, bold: true)
                 }

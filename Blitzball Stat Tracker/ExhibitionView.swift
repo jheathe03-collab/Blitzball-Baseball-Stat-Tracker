@@ -55,9 +55,13 @@ enum TeamRole: String, Identifiable {
 
 struct SelectTeamsView: View {
     @Bindable var game: Game
+    @Environment(\.modelContext) private var modelContext
     @Query private var allGames: [Game]   // for deriving each team's W-L
     // Non-nil while the team picker sheet is open; also tells us which slot to fill.
     @State private var picking: TeamRole?
+    @State private var showingDHPicker = false
+    @State private var showStartConfirm = false
+    @State private var startGame = false
 
     private var bothTeamsChosen: Bool {
         game.homeTeam != nil && game.awayTeam != nil
@@ -67,13 +71,72 @@ struct SelectTeamsView: View {
         List {
             Section {
                 TeamSlot(role: .home, team: game.homeTeam, games: allGames,
+                         lineup: game.teamLineup(isHome: true).compactMap(\.player),
                          onSelect: { picking = .home },
-                         onClear: { game.homeTeam = nil })
+                         onClear: { game.homeTeam = nil; game.homePitcher = nil; syncLineups() })
+                if game.homeTeam != nil {
+                    NavigationLink {
+                        BattingOrderView(game: game, isHome: true)
+                    } label: {
+                        Label("Batting Order", systemImage: "figure.baseball")
+                    }
+                    NavigationLink {
+                        StartingPitcherView(game: game, isHome: true)
+                    } label: {
+                        HStack {
+                            Label("Starting Pitcher", systemImage: "baseball.fill")
+                            Spacer()
+                            Text(game.homePitcher?.name ?? "Not set")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
             Section {
                 TeamSlot(role: .away, team: game.awayTeam, games: allGames,
+                         lineup: game.teamLineup(isHome: false).compactMap(\.player),
                          onSelect: { picking = .away },
-                         onClear: { game.awayTeam = nil })
+                         onClear: { game.awayTeam = nil; game.awayPitcher = nil; syncLineups() })
+                if game.awayTeam != nil {
+                    NavigationLink {
+                        BattingOrderView(game: game, isHome: false)
+                    } label: {
+                        Label("Batting Order", systemImage: "figure.baseball")
+                    }
+                    NavigationLink {
+                        StartingPitcherView(game: game, isHome: false)
+                    } label: {
+                        HStack {
+                            Label("Starting Pitcher", systemImage: "baseball.fill")
+                            Spacer()
+                            Text(game.awayPitcher?.name ?? "Not set")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            // The neutral Designated Hitter (only when that Game Option is on).
+            if game.settings.designatedHitter {
+                Section("Designated Hitter") {
+                    if let dh = game.designatedHitter {
+                        HStack {
+                            Label(dh.name, systemImage: "star.fill")
+                            Spacer()
+                            Button("Clear") {
+                                game.designatedHitter = nil
+                                syncLineups()
+                            }
+                            .foregroundStyle(.red)
+                        }
+                    }
+                    Button {
+                        showingDHPicker = true
+                    } label: {
+                        Label(game.designatedHitter == nil ? "Select Designated Hitter" : "Change Designated Hitter",
+                              systemImage: "person.badge.plus")
+                    }
+                }
             }
 
             Section {
@@ -98,9 +161,9 @@ struct SelectTeamsView: View {
                     }
                 }
 
-                // Gated until both teams are chosen. Opens the live game screen.
-                NavigationLink {
-                    LiveGameView(game: game)
+                // Gated until both teams are chosen. Confirms before opening the live game.
+                Button {
+                    showStartConfirm = true
                 } label: {
                     Label("Start Game", systemImage: "play.fill")
                         .fontWeight(.semibold)
@@ -117,11 +180,33 @@ struct SelectTeamsView: View {
         .sheet(item: $picking) { role in
             TeamPickerView(excluding: role == .home ? game.awayTeam : game.homeTeam) { team in
                 switch role {
-                case .home: game.homeTeam = team
-                case .away: game.awayTeam = team
+                case .home: game.homeTeam = team; game.homePitcher = nil
+                case .away: game.awayTeam = team; game.awayPitcher = nil
                 }
+                syncLineups()
             }
         }
+        .sheet(isPresented: $showingDHPicker) {
+            DesignatedHitterPicker(game: game)
+        }
+        .navigationDestination(isPresented: $startGame) {
+            LiveGameView(game: game)
+        }
+        .alert("Settings look good?", isPresented: $showStartConfirm) {
+            Button("Start Game") { startGame = true }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Starting a \(game.settings.matchedType.displayName) game.")
+        }
+        // Build/refresh both lineups so the team cards show the current batting order.
+        .onAppear { syncLineups() }
+    }
+
+    /// Keep both lineups (and the DH) in sync with the current selections.
+    private func syncLineups() {
+        game.syncLineup(isHome: true, using: modelContext)
+        game.syncLineup(isHome: false, using: modelContext)
+        game.syncDesignatedHitter(using: modelContext)
     }
 }
 
@@ -131,6 +216,7 @@ struct TeamSlot: View {
     let role: TeamRole
     let team: Team?
     let games: [Game]
+    let lineup: [Player]   // in batting order
     let onSelect: () -> Void
     let onClear: () -> Void
 
@@ -178,15 +264,22 @@ struct TeamSlot: View {
                     .monospacedDigit()
             }
 
-            if team.players.isEmpty {
+            if lineup.isEmpty {
                 Text("No players on this team yet.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
+                // Players shown in batting order (updates when you edit Batting Order).
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
-                    ForEach(team.players.sorted { $0.name < $1.name }) { player in
-                        Label(player.name, systemImage: "person.fill")
-                            .font(.subheadline)
+                    ForEach(Array(lineup.enumerated()), id: \.element.persistentModelID) { index, player in
+                        HStack(spacing: 6) {
+                            Text("\(index + 1).")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                            Text(player.name)
+                                .font(.subheadline)
+                        }
                     }
                 }
             }

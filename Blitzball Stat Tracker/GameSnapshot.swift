@@ -18,6 +18,10 @@ struct GameSnapshot {
     var homeInningRuns: [Int]
     var homeBatterIndex: Int
     var awayBatterIndex: Int
+    var homePitchingSwaps: Int
+    var awayPitchingSwaps: Int
+    var homePitcherOuts: Int
+    var awayPitcherOuts: Int
     var runnerFirst: Player?
     var runnerSecond: Player?
     var runnerThird: Player?
@@ -47,6 +51,10 @@ extension Game {
             homeInningRuns: homeInningRuns,
             homeBatterIndex: homeBatterIndex,
             awayBatterIndex: awayBatterIndex,
+            homePitchingSwaps: homePitchingSwaps,
+            awayPitchingSwaps: awayPitchingSwaps,
+            homePitcherOuts: homePitcherOuts,
+            awayPitcherOuts: awayPitcherOuts,
             runnerFirst: runnerFirst,
             runnerSecond: runnerSecond,
             runnerThird: runnerThird,
@@ -65,6 +73,10 @@ extension Game {
         homeInningRuns = snapshot.homeInningRuns
         homeBatterIndex = snapshot.homeBatterIndex
         awayBatterIndex = snapshot.awayBatterIndex
+        homePitchingSwaps = snapshot.homePitchingSwaps
+        awayPitchingSwaps = snapshot.awayPitchingSwaps
+        homePitcherOuts = snapshot.homePitcherOuts
+        awayPitcherOuts = snapshot.awayPitcherOuts
         runnerFirst = snapshot.runnerFirst
         runnerSecond = snapshot.runnerSecond
         runnerThird = snapshot.runnerThird
