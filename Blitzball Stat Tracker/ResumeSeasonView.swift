@@ -1,0 +1,191 @@
+//
+//  ResumeSeasonView.swift
+//  Blitzball Stat Tracker
+//
+//  Play through an in-progress season. Pick a season → see its weeks (each shows Not Played /
+//  In Progress / final score) → tap a week to play it (setup), resume it (in progress), or
+//  review its box score (final). Each week is just a Game, so it runs through the same live
+//  tracking + End Game pipeline as an exhibition.
+//
+
+import SwiftUI
+import SwiftData
+
+// MARK: - Choose an in-progress season
+
+struct ResumeSeasonView: View {
+    let nav: SeasonNavigator
+
+    @Query(sort: \Season.createdAt, order: .reverse) private var seasons: [Season]
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var seasonToDelete: Season?
+
+    private var inProgress: [Season] {
+        seasons.filter { $0.status == .inProgress }
+    }
+
+    // The alert is presented whenever a season is queued for deletion.
+    private var confirmingDelete: Binding<Bool> {
+        Binding(get: { seasonToDelete != nil }, set: { if !$0 { seasonToDelete = nil } })
+    }
+
+    var body: some View {
+        Group {
+            if inProgress.isEmpty {
+                ContentUnavailableView {
+                    Label("No Seasons in Progress", systemImage: "play.slash")
+                } description: {
+                    Text("Start a season from New Season, then come back here to play its games.")
+                }
+            } else {
+                List {
+                    ForEach(inProgress) { season in
+                        NavigationLink {
+                            SeasonGamesView(season: season, nav: nav)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(season.name.isEmpty ? "Untitled Season" : season.name)
+                                    .font(.headline)
+                                Text("\(season.gamesPlayed)/\(season.gamesPerSeason) games played")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                seasonToDelete = season
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Resume Season")
+        .navigationBarTitleDisplayMode(.inline)
+        // When the games screen popped and we're back on top, honor a pending exit-to-hub request.
+        .onAppear {
+            if nav.exitRequested {
+                nav.exitRequested = false
+                dismiss()
+            }
+        }
+        .alert("Delete Season?", isPresented: confirmingDelete, presenting: seasonToDelete) { season in
+            Button("Delete Season", role: .destructive) { delete(season) }
+            Button("Cancel", role: .cancel) { seasonToDelete = nil }
+        } message: { season in
+            Text(deleteMessage(for: season))
+        }
+    }
+
+    /// Deleting a season cascades to its weekly games and their stat lines. Because career and
+    /// team totals are DERIVED by summing game lines, those numbers update automatically. Players
+    /// and teams themselves are untouched.
+    private func delete(_ season: Season) {
+        modelContext.delete(season)
+        seasonToDelete = nil
+    }
+
+    private func deleteMessage(for season: Season) -> String {
+        let name = season.name.isEmpty ? "this season" : season.name
+        let count = season.gamesPlayed
+        let games = count == 1 ? "1 played game" : "\(count) played games"
+        return "This permanently deletes \(name) and \(games). Those stats leave every player's career and team totals. Your players and teams stay. This can't be undone."
+    }
+}
+
+// MARK: - The season's weekly games
+
+struct SeasonGamesView: View {
+    @Bindable var season: Season
+    let nav: SeasonNavigator
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(season.weeks) { game in
+                    NavigationLink {
+                        destination(for: game)
+                    } label: {
+                        weekRow(game)
+                    }
+                }
+            } footer: {
+                Text("\(season.gamesPlayed) of \(season.gamesPerSeason) games played.")
+            }
+        }
+        .navigationTitle(season.name.isEmpty ? "Season" : season.name)
+        .navigationBarTitleDisplayMode(.inline)
+        // Replace the default back arrow with a jump straight to the Season Mode menu.
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    // Ask the intermediate screen to unwind too, then pop ourselves.
+                    nav.exitRequested = true
+                    dismiss()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.backward")
+                        Text("Season Mode")
+                    }
+                }
+            }
+        }
+        // Make sure the weeks exist (harmless if they already do).
+        .onAppear { season.syncSchedule(using: modelContext) }
+    }
+
+    // Route each week by its status: not-yet-played → pre-game; in-progress → resume the live
+    // game; final → the box score (LiveGameView shows the summary when a game is final).
+    @ViewBuilder
+    private func destination(for game: Game) -> some View {
+        switch game.status {
+        case .setup:
+            WeekPregameView(game: game)
+        case .inProgress, .final:
+            LiveGameView(game: game)
+        }
+    }
+
+    private func weekRow(_ game: Game) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Week \(game.weekNumber)").bold()
+                Text(matchup(game))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            statusView(game)
+        }
+    }
+
+    private func matchup(_ game: Game) -> String {
+        let home = game.homeTeam?.name ?? "Home"
+        let away = game.awayTeam?.name ?? "Away"
+        return "\(home) vs \(away)"
+    }
+
+    @ViewBuilder
+    private func statusView(_ game: Game) -> some View {
+        switch game.status {
+        case .setup:
+            Text("Not played")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        case .inProgress:
+            Text("In Progress")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.orange)
+        case .final:
+            Text("\(game.homeScore)–\(game.awayScore)")
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+        }
+    }
+}

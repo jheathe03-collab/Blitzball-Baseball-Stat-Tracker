@@ -13,24 +13,45 @@ struct PlayerDetailView: View {
     // edit it with two-way bindings — we'll lean on that when we add stat entry.
     @Bindable var player: Player
     @State private var showingEdit = false
+    // Stat filters (nil = "All"). Tournament games don't exist yet, so Tournament shows 0s for now.
+    @State private var selectedMode: GameMode?
+    @State private var selectedYear: Int?
+
+    private var batting: BattingStats { player.battingStats(mode: selectedMode, year: selectedYear) }
+    private var pitching: PitchingStats { player.pitchingStats(mode: selectedMode, year: selectedYear) }
 
     var body: some View {
         List {
+            Section("Filter") {
+                Picker("Mode", selection: $selectedMode) {
+                    Text("All").tag(GameMode?.none)
+                    ForEach(GameMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(GameMode?.some(mode))
+                    }
+                }
+                Picker("Year", selection: $selectedYear) {
+                    Text("All").tag(Int?.none)
+                    ForEach(player.statYears, id: \.self) { year in
+                        Text(String(year)).tag(Int?.some(year))
+                    }
+                }
+            }
+
             Section("Batting") {
-                StatCell(label: "AVG", value: StatFormat.rate(player.careerBatting.battingAverage))
-                StatCell(label: "OBP", value: StatFormat.rate(player.careerBatting.onBasePercentage))
-                StatCell(label: "SLG", value: StatFormat.rate(player.careerBatting.sluggingPercentage))
-                StatCell(label: "OPS", value: StatFormat.rate(player.careerBatting.onBasePlusSlugging))
-                StatCell(label: "BB%", value: StatFormat.percent(player.careerBatting.walkRate))
-                StatCell(label: "K%", value: StatFormat.percent(player.careerBatting.strikeoutRate))
-                StatCell(label: "HBP", value: "\(player.careerBatting.hitByPitch)")
+                StatCell(label: "AVG", value: StatFormat.rate(batting.battingAverage))
+                StatCell(label: "OBP", value: StatFormat.rate(batting.onBasePercentage))
+                StatCell(label: "SLG", value: StatFormat.rate(batting.sluggingPercentage))
+                StatCell(label: "OPS", value: StatFormat.rate(batting.onBasePlusSlugging))
+                StatCell(label: "BB%", value: StatFormat.percent(batting.walkRate))
+                StatCell(label: "K%", value: StatFormat.percent(batting.strikeoutRate))
+                StatCell(label: "HBP", value: "\(batting.hitByPitch)")
             }
 
             Section("Pitching") {
-                StatCell(label: "ERA", value: StatFormat.ratio(player.careerPitching.earnedRunAverage))
-                StatCell(label: "WHIP", value: StatFormat.ratio(player.careerPitching.walksAndHitsPerInning))
-                StatCell(label: "K/BB", value: StatFormat.ratio(player.careerPitching.strikeoutToWalkRatio))
-                StatCell(label: "BAA", value: StatFormat.rate(player.careerPitching.battingAverageAgainst))
+                StatCell(label: "ERA", value: StatFormat.ratio(pitching.earnedRunAverage))
+                StatCell(label: "WHIP", value: StatFormat.ratio(pitching.walksAndHitsPerInning))
+                StatCell(label: "K/BB", value: StatFormat.ratio(pitching.strikeoutToWalkRatio))
+                StatCell(label: "BAA", value: StatFormat.rate(pitching.battingAverageAgainst))
             }
             
           

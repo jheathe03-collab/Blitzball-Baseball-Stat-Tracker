@@ -17,6 +17,7 @@ struct TeamPickerView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Team.name) private var teams: [Team]
+    @State private var showingAddTeam = false
 
     private var selectableTeams: [Team] {
         teams.filter { $0 !== excluding }
@@ -26,11 +27,13 @@ struct TeamPickerView: View {
         NavigationStack {
             Group {
                 if selectableTeams.isEmpty {
-                    ContentUnavailableView(
-                        "No Teams to Pick",
-                        systemImage: "person.3",
-                        description: Text("Create teams first — use Edit Teams on the previous screen.")
-                    )
+                    ContentUnavailableView {
+                        Label("No Teams to Pick", systemImage: "person.3")
+                    } description: {
+                        Text("Create a team to add here.")
+                    } actions: {
+                        Button("Create Team") { showingAddTeam = true }
+                    }
                 } else {
                     List(selectableTeams) { team in
                         Button {
@@ -55,6 +58,14 @@ struct TeamPickerView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { showingAddTeam = true } label: {
+                        Label("New Team", systemImage: "plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAddTeam) {
+                AddTeamView()
             }
         }
     }

@@ -17,6 +17,21 @@ enum GameStatus: String, Codable {
     case final       // finished (future)
 }
 
+/// Which mode a game belongs to, for keeping stats separate. All games are exhibitions until the
+/// Tournament feature (later) creates games with `.tournament`.
+enum GameMode: String, Codable, CaseIterable {
+    case exhibition
+    case season
+    case tournament
+    var displayName: String {
+        switch self {
+        case .exhibition: return "Exhibition"
+        case .season:     return "Season"
+        case .tournament: return "Tournament"
+        }
+    }
+}
+
 @Model
 final class Game {
 
@@ -25,6 +40,13 @@ final class Game {
 
     /// Lifecycle stage. New games start in `.setup` while teams are being chosen.
     var status: GameStatus
+
+    /// Exhibition / Season / Tournament (keeps those stats separate for filtering). Default exhibition.
+    var mode: GameMode = GameMode.exhibition
+
+    /// The season this game belongs to (when mode == .season), and its 1-based week number.
+    var season: Season?
+    var weekNumber: Int = 0
 
     /// The two sides. Optional to-one relationships: a game in setup may not have picked yet.
     /// These are unidirectional (no inverse on Team) because there are two links to the same

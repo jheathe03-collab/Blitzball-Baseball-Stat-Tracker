@@ -59,6 +59,12 @@ struct MainMenuView: View {
                                 systemImage: "person.3.fill",
                                 tint: .green)
                     }
+                    NavigationLink(destination: SeasonModeView()) {
+                        MenuRow(title: "Season",
+                                subtitle: "Run a league season week by week",
+                                systemImage: "calendar",
+                                tint: .purple)
+                    }
                 }
             }
             .navigationTitle("Main Menu")
