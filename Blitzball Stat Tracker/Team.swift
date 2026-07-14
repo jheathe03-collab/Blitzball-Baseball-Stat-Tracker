@@ -44,13 +44,14 @@ final class Team {
 extension Team {
     /// The whole roster's batting summed into one line. `reduce` starts from an empty
     /// `BattingStats()` and keeps adding each player's `batting` with our `+` operator.
+    /// Uses `teamCareerBatting` so imported/archived history (not tied to this team) is excluded.
     var battingTotals: BattingStats {
-        players.reduce(BattingStats()) { running, player in running + player.careerBatting }
+        players.reduce(BattingStats()) { running, player in running + player.teamCareerBatting }
     }
 
-    /// The whole roster's pitching summed into one line.
+    /// The whole roster's pitching summed into one line (also excludes imported/archived history).
     var pitchingTotals: PitchingStats {
-        players.reduce(PitchingStats()) { running, player in running + player.careerPitching }
+        players.reduce(PitchingStats()) { running, player in running + player.teamCareerPitching }
     }
 
     /// Win/Loss record DERIVED from finished games (games are the source). Pass the games list

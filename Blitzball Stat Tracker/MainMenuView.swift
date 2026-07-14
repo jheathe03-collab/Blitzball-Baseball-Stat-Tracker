@@ -13,10 +13,14 @@ struct MainMenuView: View {
     @State private var router = Router()
 
     var body: some View {
+        // A local bindable handle so we can bind the stack to the router's season path.
+        @Bindable var router = router
+
         // This NavigationStack is the ONE stack for the whole menu area. Every feature we
         // push (Players, Teams, ...) rides on top of it — which is why those screens don't
-        // declare their own stacks.
-        NavigationStack {
+        // declare their own stacks. The Season area is value-based (via `path`) so it can pop
+        // several levels at once; the other features stay simple view-based links.
+        NavigationStack(path: $router.seasonPath) {
             List {
                 // A little branding at the top. `.listRowBackground(.clear)` hides the usual
                 // row background so the logo floats.
@@ -59,7 +63,7 @@ struct MainMenuView: View {
                                 systemImage: "person.3.fill",
                                 tint: .green)
                     }
-                    NavigationLink(destination: SeasonModeView()) {
+                    NavigationLink(value: SeasonRoute.menu) {
                         MenuRow(title: "Season",
                                 subtitle: "Run a league season week by week",
                                 systemImage: "calendar",
@@ -68,6 +72,15 @@ struct MainMenuView: View {
                 }
             }
             .navigationTitle("Main Menu")
+            // One handler renders every Season screen, at any depth in the season stack.
+            .navigationDestination(for: SeasonRoute.self) { route in
+                switch route {
+                case .menu:             SeasonModeView()
+                case .newSeason:        NewSeasonView()
+                case .resume:           ResumeSeasonView()
+                case .games(let season): SeasonGamesView(season: season)
+                }
+            }
         }
         // Changing this id rebuilds the stack → pops back to the menu when a deep screen calls
         // router.popToRoot(). Shared via environment so those screens can trigger it.

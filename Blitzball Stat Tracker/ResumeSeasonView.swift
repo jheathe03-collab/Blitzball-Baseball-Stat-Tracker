@@ -14,11 +14,8 @@ import SwiftData
 // MARK: - Choose an in-progress season
 
 struct ResumeSeasonView: View {
-    let nav: SeasonNavigator
-
     @Query(sort: \Season.createdAt, order: .reverse) private var seasons: [Season]
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
     @State private var seasonToDelete: Season?
 
     private var inProgress: [Season] {
@@ -41,9 +38,7 @@ struct ResumeSeasonView: View {
             } else {
                 List {
                     ForEach(inProgress) { season in
-                        NavigationLink {
-                            SeasonGamesView(season: season, nav: nav)
-                        } label: {
+                        NavigationLink(value: SeasonRoute.games(season)) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(season.name.isEmpty ? "Untitled Season" : season.name)
                                     .font(.headline)
@@ -65,13 +60,6 @@ struct ResumeSeasonView: View {
         }
         .navigationTitle("Resume Season")
         .navigationBarTitleDisplayMode(.inline)
-        // When the games screen popped and we're back on top, honor a pending exit-to-hub request.
-        .onAppear {
-            if nav.exitRequested {
-                nav.exitRequested = false
-                dismiss()
-            }
-        }
         .alert("Delete Season?", isPresented: confirmingDelete, presenting: seasonToDelete) { season in
             Button("Delete Season", role: .destructive) { delete(season) }
             Button("Cancel", role: .cancel) { seasonToDelete = nil }
@@ -100,9 +88,8 @@ struct ResumeSeasonView: View {
 
 struct SeasonGamesView: View {
     @Bindable var season: Season
-    let nav: SeasonNavigator
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    @Environment(Router.self) private var router
 
     var body: some View {
         List {
@@ -125,9 +112,8 @@ struct SeasonGamesView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    // Ask the intermediate screen to unwind too, then pop ourselves.
-                    nav.exitRequested = true
-                    dismiss()
+                    // Truncate the season stack straight to the hub — one smooth animation.
+                    router.goToSeasonMenu()
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.backward")
@@ -183,9 +169,23 @@ struct SeasonGamesView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.orange)
         case .final:
-            Text("\(game.homeScore)–\(game.awayScore)")
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(game.homeScore)–\(game.awayScore)")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                if let winner = winnerText(game) {
+                    Text(winner)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
+    }
+
+    // Who won a finished game, e.g. "Team01 won" (or a tie).
+    private func winnerText(_ game: Game) -> String? {
+        if game.homeScore > game.awayScore { return game.homeTeam.map { "\($0.name) won" } }
+        if game.awayScore > game.homeScore { return game.awayTeam.map { "\($0.name) won" } }
+        return "Tie game"
     }
 }

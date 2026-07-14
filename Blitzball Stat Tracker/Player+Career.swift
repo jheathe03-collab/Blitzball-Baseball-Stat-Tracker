@@ -8,11 +8,12 @@
 //
 
 import Foundation
+import SwiftData
 
 extension Player {
-    /// Only completed games count toward career totals.
+    /// Lines that count toward career totals: finished real games AND imported archived lines.
     var finalStatLines: [GameStatLine] {
-        gameStatLines.filter { $0.game?.status == .final }
+        gameStatLines.filter(\.countsAsFinal)
     }
 
     var careerBatting: BattingStats {
@@ -23,31 +24,82 @@ extension Player {
         finalStatLines.reduce(PitchingStats()) { $0 + $1.pitching }
     }
 
-    // MARK: - Filtered (by mode and/or year; nil = "all")
+    // MARK: - Filtered (by mode and/or year and/or a specific season; nil = "all")
 
-    func statLines(mode: GameMode?, year: Int?) -> [GameStatLine] {
+    func statLines(mode: GameMode?, year: Int?, season: Season? = nil) -> [GameStatLine] {
         finalStatLines.filter { line in
-            guard let game = line.game else { return false }
-            if let mode, game.mode != mode { return false }
-            if let year, Calendar.current.component(.year, from: game.createdAt) != year { return false }
+            if let mode, line.effectiveMode != mode { return false }
+            if let year {
+                guard let date = line.effectiveDate,
+                      Calendar.current.component(.year, from: date) == year else { return false }
+            }
+            if let season {
+                guard let lineSeason = line.game?.season, lineSeason === season else { return false }
+            }
             return true
         }
     }
 
-    func battingStats(mode: GameMode?, year: Int?) -> BattingStats {
-        statLines(mode: mode, year: year).reduce(BattingStats()) { $0 + $1.batting }
+    func battingStats(mode: GameMode?, year: Int?, season: Season? = nil) -> BattingStats {
+        statLines(mode: mode, year: year, season: season).reduce(BattingStats()) { $0 + $1.batting }
     }
 
-    func pitchingStats(mode: GameMode?, year: Int?) -> PitchingStats {
-        statLines(mode: mode, year: year).reduce(PitchingStats()) { $0 + $1.pitching }
+    func pitchingStats(mode: GameMode?, year: Int?, season: Season? = nil) -> PitchingStats {
+        statLines(mode: mode, year: year, season: season).reduce(PitchingStats()) { $0 + $1.pitching }
     }
 
-    /// Distinct years this player has finished-game data in, newest first (for the year filter).
+    /// Distinct years this player has finished data in, newest first (for the year filter).
     var statYears: [Int] {
         let years = finalStatLines.compactMap { line -> Int? in
-            guard let game = line.game else { return nil }
-            return Calendar.current.component(.year, from: game.createdAt)
+            guard let date = line.effectiveDate else { return nil }
+            return Calendar.current.component(.year, from: date)
         }
         return Array(Set(years)).sorted(by: >)
+    }
+
+    /// Distinct seasons this player has finished data in, newest first (for the season sub-filter).
+    var statSeasons: [Season] {
+        var seen = Set<PersistentIdentifier>()
+        var result: [Season] = []
+        for line in finalStatLines {
+            if let season = line.game?.season, seen.insert(season.persistentModelID).inserted {
+                result.append(season)
+            }
+        }
+        return result.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    // MARK: - Filtered by a specific Season (real games only — imported lines have no season)
+
+    func statLines(inSeason season: Season) -> [GameStatLine] {
+        finalStatLines.filter { line in
+            guard let lineSeason = line.game?.season else { return false }
+            return lineSeason === season
+        }
+    }
+
+    func battingStats(inSeason season: Season) -> BattingStats {
+        statLines(inSeason: season).reduce(BattingStats()) { $0 + $1.batting }
+    }
+
+    func pitchingStats(inSeason season: Season) -> PitchingStats {
+        statLines(inSeason: season).reduce(PitchingStats()) { $0 + $1.pitching }
+    }
+
+    // MARK: - Team totals (exclude imported/archived lines)
+
+    // A team's totals should reflect only games actually played in-app under that team. Imported
+    // (archived) history isn't tied to any team, so it's left out — same spirit as excluding the
+    // neutral DH's lines from team totals.
+    var teamStatLines: [GameStatLine] {
+        gameStatLines.filter { $0.game?.status == .final }
+    }
+
+    var teamCareerBatting: BattingStats {
+        teamStatLines.reduce(BattingStats()) { $0 + $1.batting }
+    }
+
+    var teamCareerPitching: PitchingStats {
+        teamStatLines.reduce(PitchingStats()) { $0 + $1.pitching }
     }
 }

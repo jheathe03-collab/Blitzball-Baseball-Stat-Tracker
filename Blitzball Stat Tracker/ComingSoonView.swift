@@ -16,7 +16,7 @@ struct ComingSoonView: View {
         ContentUnavailableView(
             title,
             systemImage: systemImage,
-            description: Text("We'll build this out next.")
+            description: Text("Currently Under Construction.")
         )
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)

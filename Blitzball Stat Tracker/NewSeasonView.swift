@@ -10,14 +10,13 @@ import SwiftUI
 import SwiftData
 
 struct NewSeasonView: View {
-    let nav: SeasonNavigator
     @Environment(\.modelContext) private var modelContext
     @State private var season: Season?
 
     var body: some View {
         Group {
             if let season {
-                NewSeasonForm(season: season, nav: nav)
+                NewSeasonForm(season: season)
             } else {
                 ProgressView()
             }
@@ -44,11 +43,9 @@ struct NewSeasonView: View {
 
 private struct NewSeasonForm: View {
     @Bindable var season: Season
-    let nav: SeasonNavigator
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    @Environment(Router.self) private var router
     @State private var showStartConfirm = false
-    @State private var goToSchedule = false
 
     var body: some View {
         Form {
@@ -106,23 +103,13 @@ private struct NewSeasonForm: View {
         } message: {
             Text("Start \(season.name.isEmpty ? "this season" : season.name)? You'll jump straight to its schedule to play the games.")
         }
-        // After starting, drop the user right into the season's week-by-week schedule.
-        .navigationDestination(isPresented: $goToSchedule) {
-            SeasonGamesView(season: season, nav: nav)
-        }
-        // When the games screen popped and we're back on top, honor a pending exit-to-hub request.
-        .onAppear {
-            if nav.exitRequested {
-                nav.exitRequested = false
-                dismiss()
-            }
-        }
     }
 
     private func startSeason() {
-        // Apply the season rulebook to each week's game, mark it in progress, then jump to the schedule.
+        // Apply the season rulebook to each week's game, mark it in progress, then push its
+        // schedule onto the season stack (single value → single push).
         for game in season.games { game.settings = season.settings }
         season.status = .inProgress
-        goToSchedule = true
+        router.seasonPath.append(.games(season))
     }
 }

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct PlayerDetailView: View {
     // The player to display. `@Bindable` lets us both read this SwiftData object and (later)
@@ -16,9 +17,21 @@ struct PlayerDetailView: View {
     // Stat filters (nil = "All"). Tournament games don't exist yet, so Tournament shows 0s for now.
     @State private var selectedMode: GameMode?
     @State private var selectedYear: Int?
+    // A specific season (only meaningful when Mode = Season). nil = all seasons.
+    @State private var selectedSeason: Season?
+    // Export state: the generated file to share, and any error to surface.
+    @State private var exportFile: ExportFile?
+    @State private var exportError: String?
 
-    private var batting: BattingStats { player.battingStats(mode: selectedMode, year: selectedYear) }
-    private var pitching: PitchingStats { player.pitchingStats(mode: selectedMode, year: selectedYear) }
+    private var batting: BattingStats { player.battingStats(mode: selectedMode, year: selectedYear, season: selectedSeason) }
+    private var pitching: PitchingStats { player.pitchingStats(mode: selectedMode, year: selectedYear, season: selectedSeason) }
+    // How many finished games are in the current filter (shown as "G" in the totals).
+    private var games: Int { player.statLines(mode: selectedMode, year: selectedYear, season: selectedSeason).count }
+    // Innings pitched in the standard "innings.outs" form (16 outs → "5.1"), from outsRecorded.
+    private var inningsPitchedText: String {
+        let outs = pitching.outsRecorded
+        return "\(outs / 3).\(outs % 3)"
+    }
 
     var body: some View {
         List {
@@ -29,12 +42,26 @@ struct PlayerDetailView: View {
                         Text(mode.displayName).tag(GameMode?.some(mode))
                     }
                 }
+                // Sub-filter: when viewing Season stats, narrow to one specific season.
+                if selectedMode == .season && !player.statSeasons.isEmpty {
+                    Picker("Season", selection: $selectedSeason) {
+                        Text("All Seasons").tag(Season?.none)
+                        ForEach(player.statSeasons, id: \.persistentModelID) { season in
+                            Text(season.name.isEmpty ? "Untitled Season" : season.name)
+                                .tag(Season?.some(season))
+                        }
+                    }
+                }
                 Picker("Year", selection: $selectedYear) {
                     Text("All").tag(Int?.none)
                     ForEach(player.statYears, id: \.self) { year in
                         Text(String(year)).tag(Int?.some(year))
                     }
                 }
+            }
+            // Leaving Season mode clears the season sub-filter so it can't silently apply.
+            .onChange(of: selectedMode) {
+                if selectedMode != .season { selectedSeason = nil }
             }
 
             Section("Batting") {
@@ -44,6 +71,22 @@ struct PlayerDetailView: View {
                 StatCell(label: "OPS", value: StatFormat.rate(batting.onBasePlusSlugging))
                 StatCell(label: "BB%", value: StatFormat.percent(batting.walkRate))
                 StatCell(label: "K%", value: StatFormat.percent(batting.strikeoutRate))
+            }
+
+            // Raw counting stats (the box-score numbers) for the current filter.
+            Section("Batting Totals") {
+                StatCell(label: "G", value: "\(games)")
+                StatCell(label: "PA", value: "\(batting.plateAppearances)")
+                StatCell(label: "AB", value: "\(batting.atBats)")
+                StatCell(label: "H", value: "\(batting.hits)")
+                StatCell(label: "1B", value: "\(batting.singles)")
+                StatCell(label: "2B", value: "\(batting.doubles)")
+                StatCell(label: "3B", value: "\(batting.triples)")
+                StatCell(label: "HR", value: "\(batting.homeRuns)")
+                StatCell(label: "RBI", value: "\(batting.rbi)")
+                StatCell(label: "R", value: "\(batting.runsScored)")
+                StatCell(label: "BB", value: "\(batting.walks)")
+                StatCell(label: "K", value: "\(batting.strikeouts)")
                 StatCell(label: "HBP", value: "\(batting.hitByPitch)")
             }
 
@@ -53,6 +96,19 @@ struct PlayerDetailView: View {
                 StatCell(label: "K/BB", value: StatFormat.ratio(pitching.strikeoutToWalkRatio))
                 StatCell(label: "BAA", value: StatFormat.rate(pitching.battingAverageAgainst))
             }
+
+            // Raw pitching counting stats for the current filter.
+            Section("Pitching Totals") {
+                StatCell(label: "IP", value: inningsPitchedText)
+                StatCell(label: "H", value: "\(pitching.hitsAllowed)")
+                StatCell(label: "R", value: "\(pitching.runsAllowed)")
+                StatCell(label: "ER", value: "\(pitching.earnedRuns)")
+                StatCell(label: "HR", value: "\(pitching.homeRunsAllowed)")
+                StatCell(label: "BB", value: "\(pitching.walksAllowed)")
+                StatCell(label: "K", value: "\(pitching.strikeouts)")
+                StatCell(label: "SV", value: "\(pitching.saves)")
+                StatCell(label: "QS", value: "\(pitching.qualityStarts)")
+            }
             
           
         }
@@ -60,13 +116,76 @@ struct PlayerDetailView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Edit") { showingEdit = true }
+                Menu {
+                    Button { showingEdit = true } label: {
+                        Label("Edit Player", systemImage: "pencil")
+                    }
+                    Button(action: exportStats) {
+                        Label("Export Stats…", systemImage: "square.and.arrow.up")
+                    }
+                    // Nothing to export until the player has finished-game history.
+                    .disabled(player.finalStatLines.isEmpty)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
             }
         }
         .sheet(isPresented: $showingEdit) {
             EditPlayerView(player: player)
         }
+        .sheet(item: $exportFile) { file in
+            ShareSheet(items: [file.url])
+        }
+        .alert("Export Failed", isPresented: exportErrorBinding) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(exportError ?? "")
+        }
     }
+
+    // MARK: - Export
+
+    private var exportErrorBinding: Binding<Bool> {
+        Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
+    }
+
+    /// Build the player's archive JSON, write it to a temp file, and present the share sheet.
+    private func exportStats() {
+        do {
+            let data = try PlayerArchive(exporting: player).encoded()
+            let url = URL.temporaryDirectory.appending(path: exportFilename)
+            try data.write(to: url, options: .atomic)
+            exportFile = ExportFile(url: url)
+        } catch {
+            exportError = error.localizedDescription
+        }
+    }
+
+    /// e.g. "Mike-stats-2026-07-14.json" (name sanitized for the filesystem).
+    private var exportFilename: String {
+        let illegal = CharacterSet(charactersIn: "/\\:?%*|\"<>")
+        let cleaned = player.name.components(separatedBy: illegal).joined()
+            .trimmingCharacters(in: .whitespaces)
+        let base = cleaned.isEmpty ? "player" : cleaned
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return "\(base)-stats-\(formatter.string(from: .now)).json"
+    }
+}
+
+/// A shareable file wrapper (Identifiable so it can drive `.sheet(item:)`).
+private struct ExportFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// Bridges UIKit's share sheet (AirDrop / Save to Files / Messages) into SwiftUI.
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 /// A single labeled stat: the abbreviation on the left, the value on the right.

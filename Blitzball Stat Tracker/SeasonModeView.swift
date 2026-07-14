@@ -8,29 +8,20 @@
 import SwiftUI
 
 struct SeasonModeView: View {
-    // Shared with every screen below, so a deep screen can request unwinding back to this hub.
-    @State private var seasonNav = SeasonNavigator()
-
     var body: some View {
         List {
-            NavigationLink {
-                NewSeasonView(nav: seasonNav)
-            } label: {
+            NavigationLink(value: SeasonRoute.newSeason) {
                 Label("New Season", systemImage: "plus.circle")
             }
-            NavigationLink {
-                ResumeSeasonView(nav: seasonNav)
-            } label: {
+            NavigationLink(value: SeasonRoute.resume) {
                 Label("Resume Season", systemImage: "play.circle")
             }
             NavigationLink {
-                ComingSoonView(title: "Season Stats", systemImage: "chart.bar")
+                SeasonStatsView()
             } label: {
                 Label("Season Stats", systemImage: "chart.bar")
             }
         }
         .navigationTitle("Season Mode")
-        // We're home — clear any pending exit request.
-        .onAppear { seasonNav.exitRequested = false }
     }
 }

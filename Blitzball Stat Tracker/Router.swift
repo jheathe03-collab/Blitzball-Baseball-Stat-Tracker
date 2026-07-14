@@ -13,12 +13,31 @@
 
 import SwiftUI
 
+/// The Season area IS value-based (unlike the rest of the menu), so we can push these onto a real
+/// NavigationPath and pop several levels at once — a single smooth animation back to the hub.
+enum SeasonRoute: Hashable {
+    case menu           // the Season Mode hub
+    case newSeason
+    case resume
+    case games(Season)  // a specific season's week-by-week list
+}
+
 @Observable
 final class Router {
     /// Changing this rebuilds the menu's NavigationStack, returning to the root (menu).
     var resetID = UUID()
 
+    /// The Season area's navigation stack. Setting/truncating this pops season screens in one go.
+    var seasonPath: [SeasonRoute] = []
+
     func popToRoot() {
+        // Clear the season stack too, so a rebuild doesn't immediately re-push season screens.
+        seasonPath.removeAll()
         resetID = UUID()
+    }
+
+    /// Unwind the Season area back to its hub (Season Mode) in a single animation.
+    func goToSeasonMenu() {
+        seasonPath = [.menu]
     }
 }

@@ -25,6 +25,17 @@ final class GameStatLine {
     /// bats in both lineups). Kept out of team totals so DH stats stay personal-only.
     var isDH: Bool = false
 
+    // MARK: - Archived (imported) line context
+    // A line imported from another device has NO real `game`. These fields carry the context the
+    // aggregations need — `archivedAt` (year filter), `archivedMode` (mode filter) — plus labels,
+    // so an imported line counts toward a player's career WITHOUT fabricating a fake Game.
+    var isArchived: Bool = false
+    var archivedAt: Date? = nil
+    var archivedMode: GameMode? = nil
+    var archivedOpponent: String? = nil
+    var archivedSeasonName: String? = nil
+    var archivedWeek: Int? = nil
+
     /// This player's batting and pitching for this game only.
     var batting: BattingStats
     var pitching: PitchingStats
@@ -51,5 +62,24 @@ final class GameStatLine {
         self.isDH = isDH
         self.batting = batting
         self.pitching = pitching
+    }
+}
+
+// MARK: - Derivation helpers (real game OR imported archive)
+
+extension GameStatLine {
+    /// Counts toward career totals: a finished real game, or an imported archived line.
+    var countsAsFinal: Bool {
+        isArchived || game?.status == .final
+    }
+
+    /// Date used for the year filter — the real game's date, or the archived date.
+    var effectiveDate: Date? {
+        game?.createdAt ?? archivedAt
+    }
+
+    /// Mode used for the mode filter — the real game's mode, or the archived mode.
+    var effectiveMode: GameMode? {
+        game?.mode ?? archivedMode
     }
 }
