@@ -12,6 +12,7 @@ import SwiftData
 struct TeamsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Team.name) private var teams: [Team]
+    @Query private var games: [Game]   // for deriving each team's W-L
     @State private var showingAddTeam = false
     // The team the user swiped to delete, held while we confirm. nil = nothing pending.
     @State private var teamPendingDeletion: Team?
@@ -51,10 +52,11 @@ struct TeamsView: View {
                     // Win/Loss standings (0-0 for now) + a way into the full stats table.
                     Section("Team Leaderboard") {
                         ForEach(teams) { team in
+                            let record = team.record(from: games)
                             HStack {
                                 Text(team.name)
                                 Spacer()
-                                Text("Wins \(team.wins)  Losses \(team.losses)")
+                                Text("Wins \(record.wins)  Losses \(record.losses)")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()

@@ -16,10 +16,7 @@ final class Team {
     /// The team's name (e.g. "The Sluggers").
     var name: String
 
-    /// Win/Loss record. Display-only for now — these will be driven by games (Exhibition /
-    /// Tournament) once those features exist.
-    var wins: Int
-    var losses: Int
+    // Win/Loss is no longer stored — it's DERIVED from finished games (see record(from:) below).
 
     /// Placeholder for the future League feature. Optional (`String?`) since it's unset for now.
     var league: String?
@@ -33,14 +30,10 @@ final class Team {
 
     init(
         name: String,
-        wins: Int = 0,
-        losses: Int = 0,
         league: String? = nil,
         dateAdded: Date = .now
     ) {
         self.name = name
-        self.wins = wins
-        self.losses = losses
         self.league = league
         self.dateAdded = dateAdded
     }
@@ -52,16 +45,27 @@ extension Team {
     /// The whole roster's batting summed into one line. `reduce` starts from an empty
     /// `BattingStats()` and keeps adding each player's `batting` with our `+` operator.
     var battingTotals: BattingStats {
-        players.reduce(BattingStats()) { running, player in running + player.batting }
+        players.reduce(BattingStats()) { running, player in running + player.careerBatting }
     }
 
     /// The whole roster's pitching summed into one line.
     var pitchingTotals: PitchingStats {
-        players.reduce(PitchingStats()) { running, player in running + player.pitching }
+        players.reduce(PitchingStats()) { running, player in running + player.careerPitching }
     }
 
-    /// A tidy "W-L" string for the leaderboard, e.g. "3-2".
-    var record: String {
-        "\(wins)-\(losses)"
+    /// Win/Loss record DERIVED from finished games (games are the source). Pass the games list
+    /// (e.g. from an @Query). Ties count as neither.
+    func record(from games: [Game]) -> (wins: Int, losses: Int) {
+        var wins = 0
+        var losses = 0
+        for game in games where game.status == .final {
+            let isHome = game.homeTeam === self
+            let isAway = game.awayTeam === self
+            guard isHome || isAway else { continue }
+            let mine = isHome ? game.homeScore : game.awayScore
+            let theirs = isHome ? game.awayScore : game.homeScore
+            if mine > theirs { wins += 1 } else if mine < theirs { losses += 1 }
+        }
+        return (wins, losses)
     }
 }

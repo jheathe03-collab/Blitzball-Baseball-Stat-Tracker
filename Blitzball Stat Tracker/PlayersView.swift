@@ -16,6 +16,8 @@ struct PlayersView: View {
     @State private var showingAddPlayer = false
     // The player swiped for deletion, held while we confirm.
     @State private var playerPendingDeletion: Player?
+    // The player being edited (drives the edit sheet).
+    @State private var playerToEdit: Player?
 
     var body: some View {
         // No NavigationStack here anymore — the Main Menu owns it. We just describe the
@@ -32,6 +34,10 @@ struct PlayersView: View {
                     ForEach(players) { player in
                         NavigationLink(destination: PlayerDetailView(player: player)) {
                             PlayerRow(player: player)
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button("Edit") { playerToEdit = player }
+                                .tint(.blue)
                         }
                     }
                     .onDelete { offsets in
@@ -57,6 +63,9 @@ struct PlayersView: View {
         }
         .sheet(isPresented: $showingAddPlayer) {
             AddPlayerView()
+        }
+        .sheet(item: $playerToEdit) { player in
+            EditPlayerView(player: player)
         }
         .alert("Delete Player?", isPresented: deletePlayerAlert, presenting: playerPendingDeletion) { player in
             Button("Delete \(player.name)", role: .destructive) {

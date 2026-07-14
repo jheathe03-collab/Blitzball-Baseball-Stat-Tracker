@@ -19,13 +19,8 @@ final class Player {
     /// not have a number yet. This is a Swift *optional*.
     var jerseyNumber: Int?
 
-    /// The player's batting line. This is one of your tested structs from the Stats folder!
-    /// SwiftData can store any `Codable` value type like this, so all the computed stats
-    /// (AVG, OBP, ...) come along for free — read them as `player.batting.battingAverage`.
-    var batting: BattingStats
-
-    /// The player's pitching line — same idea.
-    var pitching: PitchingStats
+    // A player's career batting/pitching aren't stored — they're COMPUTED by summing this
+    // player's finished-game stat lines (see Player+Career.swift). "Games are the source."
 
     /// The teams this player belongs to. Many-to-many: a player can be on multiple teams
     /// (e.g. across seasons/leagues), and each team has many players. `Team.players` is the
@@ -44,14 +39,10 @@ final class Player {
     init(
         name: String,
         jerseyNumber: Int? = nil,
-        batting: BattingStats = BattingStats(),
-        pitching: PitchingStats = PitchingStats(),
         dateAdded: Date = .now
     ) {
         self.name = name
         self.jerseyNumber = jerseyNumber
-        self.batting = batting
-        self.pitching = pitching
         self.dateAdded = dateAdded
     }
 }

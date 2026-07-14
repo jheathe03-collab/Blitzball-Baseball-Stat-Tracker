@@ -35,4 +35,10 @@ public enum StatFormat {
     public static func percent(_ value: Double) -> String {
         String(format: "%.1f%%", value * 100)
     }
+
+    /// Innings pitched in baseball "thirds" notation from a raw out count: the decimal digit is
+    /// outs (0/1/2), NOT a real fraction. `16 outs -> "5.1"` (5⅓), `18 -> "6.0"`.
+    public static func inningsPitched(outs: Int) -> String {
+        "\(outs / 3).\(outs % 3)"
+    }
 }

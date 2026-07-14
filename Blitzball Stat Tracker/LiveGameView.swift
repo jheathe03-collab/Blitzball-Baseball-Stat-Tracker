@@ -19,12 +19,22 @@ struct LiveGameView: View {
     @State private var showEndConfirm = false
     @State private var showBatterPicker = false
     @State private var showPitcherPicker = false
+    @State private var showSubstitution = false
     @State private var editingBase: BaseSelection?
 
     // In-memory Undo history: a snapshot is pushed before each play, capped to the last 100.
     @State private var undoStack: [GameSnapshot] = []
 
     var body: some View {
+        // Once the game is over, this same screen becomes the box score.
+        if game.status == .final {
+            GameSummaryView(game: game)
+        } else {
+            liveContent
+        }
+    }
+
+    private var liveContent: some View {
         ZStack {
             ScrollView {
                 VStack(spacing: 20) {
@@ -72,6 +82,9 @@ struct LiveGameView: View {
                 game.activePitcher = line.player
             }
         }
+        .sheet(isPresented: $showSubstitution) {
+            SubstitutionView(game: game)
+        }
         .sheet(item: $editingBase) { selection in
             BaseEditorSheet(
                 baseName: baseName(selection.index),
@@ -82,8 +95,7 @@ struct LiveGameView: View {
         }
         .alert("End Game?", isPresented: $showEndConfirm) {
             Button("End Game", role: .destructive) {
-                game.status = .final
-                dismiss()
+                game.status = .final   // the view switches to the Game Summary
             }
             Button("Cancel", role: .cancel) { }
         } message: {
@@ -185,15 +197,15 @@ struct LiveGameView: View {
             }
             .buttonStyle(.bordered)
 
-            NavigationLink { ComingSoonView(title: "Substitute Player", systemImage: "arrow.left.arrow.right") } label: {
+            Button { showSubstitution = true } label: {
                 Label("Substitute Player", systemImage: "arrow.left.arrow.right").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            NavigationLink { ComingSoonView(title: "Select Inning", systemImage: "pencil") } label: {
-                Label("Select Inning (edit)", systemImage: "pencil").frame(maxWidth: .infinity)
+            NavigationLink { EditGameView(game: game) } label: {
+                Label("Edit Stats & Score", systemImage: "pencil").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            NavigationLink { ComingSoonView(title: "Game Summary", systemImage: "list.bullet.rectangle") } label: {
+            NavigationLink { GameSummaryView(game: game) } label: {
                 Label("Game Summary", systemImage: "list.bullet.rectangle").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -258,7 +270,7 @@ private struct Scoreboard: View {
 
     var body: some View {
         HStack(alignment: .center) {
-            teamColumn(name: game.homeTeam?.name ?? "Home", score: game.homeScore)
+            teamColumn(role: "Home", name: game.homeTeam?.name ?? "Home", score: game.homeScore)
             Spacer()
             VStack(spacing: 4) {
                 Text(game.halfInningLabel).font(.headline)
@@ -266,12 +278,15 @@ private struct Scoreboard: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            teamColumn(name: game.awayTeam?.name ?? "Away", score: game.awayScore)
+            teamColumn(role: "Away", name: game.awayTeam?.name ?? "Away", score: game.awayScore)
         }
     }
 
-    private func teamColumn(name: String, score: Int) -> some View {
+    private func teamColumn(role: String, name: String, score: Int) -> some View {
         VStack(spacing: 2) {
+            Text(role.uppercased())
+                .font(.caption2).bold()
+                .foregroundStyle(.secondary)
             Text(name).font(.subheadline).bold().lineLimit(1)
             Text("\(score)").font(.largeTitle).monospacedDigit()
         }

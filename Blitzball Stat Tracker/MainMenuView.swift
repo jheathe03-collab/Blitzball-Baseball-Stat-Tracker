@@ -9,6 +9,9 @@ import SwiftUI
 import SwiftData
 
 struct MainMenuView: View {
+    // Owns the navigation path so deep screens can pop back to the menu (shared via environment).
+    @State private var router = Router()
+
     var body: some View {
         // This NavigationStack is the ONE stack for the whole menu area. Every feature we
         // push (Players, Teams, ...) rides on top of it — which is why those screens don't
@@ -60,6 +63,10 @@ struct MainMenuView: View {
             }
             .navigationTitle("Main Menu")
         }
+        // Changing this id rebuilds the stack → pops back to the menu when a deep screen calls
+        // router.popToRoot(). Shared via environment so those screens can trigger it.
+        .id(router.resetID)
+        .environment(router)
     }
 }
 

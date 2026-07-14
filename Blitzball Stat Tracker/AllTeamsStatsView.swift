@@ -11,6 +11,7 @@ import SwiftData
 
 struct AllTeamsStatsView: View {
     @Query(sort: \Team.name) private var teams: [Team]
+    @Query private var games: [Game]   // for deriving W-L
 
     // The stat columns, left to right (after the team-name column).
     private let headers = ["AVG", "W-L", "HR", "RBI", "Hits", "ERA", "Saves", "K", "QS"]
@@ -40,10 +41,11 @@ struct AllTeamsStatsView: View {
                         ForEach(teams) { team in
                             let batting = team.battingTotals
                             let pitching = team.pitchingTotals
+                            let record = team.record(from: games)
                             GridRow {
                                 Text(team.name).bold()
                                 Text(StatFormat.rate(batting.battingAverage))
-                                Text(team.record)
+                                Text("\(record.wins)-\(record.losses)")
                                 Text("\(batting.homeRuns)")
                                 Text("\(batting.rbi)")
                                 Text("\(batting.hits)")
@@ -66,15 +68,11 @@ struct AllTeamsStatsView: View {
 
 #Preview {
     let container = try! ModelContainer(
-        for: Team.self, Player.self,
+        for: Team.self, Player.self, Game.self, GameStatLine.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     let team = Team(name: "Sluggers")
-    team.players.append(
-        Player(name: "Slugger",
-               batting: BattingStats(atBats: 10, hits: 4, homeRuns: 2, rbi: 5),
-               pitching: PitchingStats(outsRecorded: 18, earnedRuns: 2, strikeouts: 7, saves: 1, qualityStarts: 1))
-    )
+    team.players.append(Player(name: "Slugger", jerseyNumber: 9))
     container.mainContext.insert(team)
 
     return NavigationStack {

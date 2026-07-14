@@ -55,6 +55,7 @@ enum TeamRole: String, Identifiable {
 
 struct SelectTeamsView: View {
     @Bindable var game: Game
+    @Query private var allGames: [Game]   // for deriving each team's W-L
     // Non-nil while the team picker sheet is open; also tells us which slot to fill.
     @State private var picking: TeamRole?
 
@@ -65,12 +66,12 @@ struct SelectTeamsView: View {
     var body: some View {
         List {
             Section {
-                TeamSlot(role: .home, team: game.homeTeam,
+                TeamSlot(role: .home, team: game.homeTeam, games: allGames,
                          onSelect: { picking = .home },
                          onClear: { game.homeTeam = nil })
             }
             Section {
-                TeamSlot(role: .away, team: game.awayTeam,
+                TeamSlot(role: .away, team: game.awayTeam, games: allGames,
                          onSelect: { picking = .away },
                          onClear: { game.awayTeam = nil })
             }
@@ -129,6 +130,7 @@ struct SelectTeamsView: View {
 struct TeamSlot: View {
     let role: TeamRole
     let team: Team?
+    let games: [Game]
     let onSelect: () -> Void
     let onClear: () -> Void
 
@@ -164,12 +166,13 @@ struct TeamSlot: View {
     // The card shown once a team is chosen: name + W-L + roster grid.
     // (Future: this card is where a horizontal stat expansion could live.)
     private func filledCard(_ team: Team) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let record = team.record(from: games)
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(team.name)
                     .font(.title3).bold()
                 Spacer()
-                Text("Wins \(team.wins)  Losses \(team.losses)")
+                Text("Wins \(record.wins)  Losses \(record.losses)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -212,7 +215,7 @@ struct TeamSlot: View {
 
 #Preview {
     let container = try! ModelContainer(
-        for: Game.self, Team.self, Player.self,
+        for: Game.self, Team.self, Player.self, GameStatLine.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     let home = Team(name: "Sluggers")
