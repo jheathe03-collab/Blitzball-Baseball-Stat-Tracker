@@ -430,7 +430,8 @@ private struct Scoreboard: View {
 
     var body: some View {
         HStack(alignment: .center) {
-            teamColumn(role: "Home", name: game.homeTeam?.name ?? "Home", score: game.homeScore)
+            teamColumn(role: "Home", logoName: game.homeTeam?.logoName,
+                       name: game.homeTeam?.name ?? "Home", score: game.homeScore)
             Spacer()
             VStack(spacing: 4) {
                 Text(game.halfInningLabel).font(.headline)
@@ -438,15 +439,17 @@ private struct Scoreboard: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            teamColumn(role: "Away", name: game.awayTeam?.name ?? "Away", score: game.awayScore)
+            teamColumn(role: "Away", logoName: game.awayTeam?.logoName,
+                       name: game.awayTeam?.name ?? "Away", score: game.awayScore)
         }
     }
 
-    private func teamColumn(role: String, name: String, score: Int) -> some View {
+    private func teamColumn(role: String, logoName: String?, name: String, score: Int) -> some View {
         VStack(spacing: 2) {
             Text(role.uppercased())
                 .font(.caption2).bold()
                 .foregroundStyle(.secondary)
+            TeamLogoView(logoName: logoName, size: 44)
             Text(name).font(.subheadline).bold().lineLimit(1)
             Text("\(score)").font(.largeTitle).monospacedDigit()
         }

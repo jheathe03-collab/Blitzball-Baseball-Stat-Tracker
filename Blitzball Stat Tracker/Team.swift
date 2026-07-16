@@ -21,6 +21,9 @@ final class Team {
     /// Placeholder for the future League feature. Optional (`String?`) since it's unset for now.
     var league: String?
 
+    /// The bundled logo asset this team uses (see TeamLogo). nil = no logo chosen.
+    var logoName: String?
+
     /// When the team was created (handy for sorting later).
     var dateAdded: Date
 
@@ -31,10 +34,12 @@ final class Team {
     init(
         name: String,
         league: String? = nil,
+        logoName: String? = nil,
         dateAdded: Date = .now
     ) {
         self.name = name
         self.league = league
+        self.logoName = logoName
         self.dateAdded = dateAdded
     }
 }

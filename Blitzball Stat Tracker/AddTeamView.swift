@@ -13,6 +13,8 @@ struct AddTeamView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
+    @State private var logoName: String?
+    @State private var showingLogoPicker = false
 
     var body: some View {
         NavigationStack {
@@ -20,10 +22,27 @@ struct AddTeamView: View {
                 TextField("", text: $name,
                           prompt: Text("Team name").foregroundStyle(.white.opacity(0.5)))
                     .blitzCardRow()
+
+                Button {
+                    showingLogoPicker = true
+                } label: {
+                    HStack {
+                        TeamLogoView(logoName: logoName, size: 32)
+                        Text(logoName.map(TeamLogo.displayName) ?? "Choose Logo")
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.4))
+                    }
+                }
+                .buttonStyle(.plain)
+                .blitzCardRow()
             }
             .navigationTitle("New Team")
             .navigationBarTitleDisplayMode(.inline)
             .blitzballBackground()
+            .sheet(isPresented: $showingLogoPicker) {
+                TeamLogoPicker(logoName: $logoName)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -37,7 +56,7 @@ struct AddTeamView: View {
     }
 
     private func addTeam() {
-        let team = Team(name: name.trimmingCharacters(in: .whitespaces))
+        let team = Team(name: name.trimmingCharacters(in: .whitespaces), logoName: logoName)
         modelContext.insert(team)
         dismiss()
     }

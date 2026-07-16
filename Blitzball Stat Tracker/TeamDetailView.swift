@@ -14,6 +14,7 @@ struct TeamDetailView: View {
 
     @State private var showingAddExisting = false
     @State private var showingCreatePlayer = false
+    @State private var showingLogoPicker = false
     // The member swiped for removal, held while we confirm.
     @State private var memberPendingRemoval: Player?
 
@@ -24,6 +25,26 @@ struct TeamDetailView: View {
 
     var body: some View {
         List {
+            // Team logo header — tap to choose/change the logo.
+            Section {
+                Button {
+                    showingLogoPicker = true
+                } label: {
+                    HStack(spacing: 14) {
+                        TeamLogoView(logoName: team.logoName, size: 56)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(team.name).font(.title3).bold().foregroundStyle(.white)
+                            Text(team.logoName == nil ? "Add a logo" : "Change logo")
+                                .font(.caption).foregroundStyle(.white.opacity(0.6))
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.4))
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .blitzCardRow()
+
             Section {
                 Button {
                     showingAddExisting = true
@@ -76,6 +97,9 @@ struct TeamDetailView: View {
         }
         .sheet(isPresented: $showingCreatePlayer) {
             AddPlayerView(team: team)
+        }
+        .sheet(isPresented: $showingLogoPicker) {
+            TeamLogoPicker(logoName: $team.logoName)
         }
         // Confirm before removing a member. This only un-links — the Player record stays.
         .alert("Remove Player?", isPresented: removeMemberAlert, presenting: memberPendingRemoval) { player in

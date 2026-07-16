@@ -35,6 +35,7 @@ struct TeamsView: View {
                         ForEach(teams) { team in
                             NavigationLink(destination: TeamDetailView(team: team)) {
                                 HStack {
+                                    TeamLogoView(logoName: team.logoName, size: 28)
                                     Text(team.name)
                                         .font(.headline)
                                     Spacer()
@@ -63,6 +64,7 @@ struct TeamsView: View {
                         ForEach(teams) { team in
                             let record = team.record(from: games)
                             HStack {
+                                TeamLogoView(logoName: team.logoName, size: 24)
                                 Text(team.name)
                                 Spacer()
                                 Text("Wins \(record.wins)  Losses \(record.losses)")
