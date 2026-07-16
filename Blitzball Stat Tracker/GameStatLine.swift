@@ -36,9 +36,11 @@ final class GameStatLine {
     var archivedSeasonName: String? = nil
     var archivedWeek: Int? = nil
 
-    /// This player's batting and pitching for this game only.
-    var batting: BattingStats
-    var pitching: PitchingStats
+    /// This player's batting and pitching for this game — stored as JSON blobs (see BlobCoder) so
+    /// new stats can be added later without a schema change. Access via the `batting`/`pitching`
+    /// computed properties below.
+    var battingData: Data
+    var pitchingData: Data
 
     /// The game this line belongs to. (Inverse is declared on `Game.statLines`.)
     var game: Game?
@@ -60,8 +62,24 @@ final class GameStatLine {
         self.battingOrder = battingOrder
         self.isActive = isActive
         self.isDH = isDH
-        self.batting = batting
-        self.pitching = pitching
+        self.battingData = BlobCoder.encode(batting)
+        self.pitchingData = BlobCoder.encode(pitching)
+    }
+}
+
+// MARK: - Stat accessors (decode/encode the JSON blobs)
+
+extension GameStatLine {
+    /// This line's batting, decoded from its blob. Setting re-encodes it. Missing stats default to 0.
+    var batting: BattingStats {
+        get { BlobCoder.decode(battingData) ?? BattingStats() }
+        set { battingData = BlobCoder.encode(newValue) }
+    }
+
+    /// This line's pitching, decoded from its blob. Setting re-encodes it.
+    var pitching: PitchingStats {
+        get { BlobCoder.decode(pitchingData) ?? PitchingStats() }
+        set { pitchingData = BlobCoder.encode(newValue) }
     }
 }
 

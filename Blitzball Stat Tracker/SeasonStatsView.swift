@@ -25,7 +25,7 @@ struct SeasonStatsView: View {
         Group {
             if visible.isEmpty {
                 ContentUnavailableView {
-                    Label("No Seasons Yet", systemImage: "chart.bar")
+                    Label("No Seasons Yet", systemImage: "chart.bar.horizontal.page")
                 } description: {
                     Text("Start a season and play some games to see its stats here.")
                 }

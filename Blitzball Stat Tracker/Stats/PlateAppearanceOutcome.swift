@@ -10,6 +10,7 @@ public enum PlateAppearanceOutcome: String, CaseIterable, Codable, Sendable {
     case homeRun
     case walk
     case strikeout
+    case strikeoutLooking
     case out
     case hitByPitch
 
@@ -22,6 +23,7 @@ public enum PlateAppearanceOutcome: String, CaseIterable, Codable, Sendable {
         case .homeRun:    return "HR"
         case .walk:       return "BB"
         case .strikeout:  return "K"
+        case .strikeoutLooking: return "Kʟ"
         case .out:        return "Out"
         case .hitByPitch: return "HBP"
         }
@@ -44,7 +46,7 @@ public enum PlateAppearanceOutcome: String, CaseIterable, Codable, Sendable {
 
     /// Whether this outcome records an out (a strikeout or an in-play out).
     public var isOut: Bool {
-        self == .strikeout || self == .out
+        self == .strikeout || self == .strikeoutLooking || self == .out
     }
 }
 
@@ -60,6 +62,7 @@ extension BattingStats {
         case .homeRun:    hits += 1; homeRuns += 1
         case .walk:       walks += 1
         case .strikeout:  strikeouts += 1
+        case .strikeoutLooking: strikeouts += 1; strikeoutsLooking += 1
         case .out:        break
         case .hitByPitch: hitByPitch += 1
         }
@@ -76,7 +79,7 @@ extension PitchingStats {
         case .single, .double, .triple: hitsAllowed += 1
         case .homeRun:                  hitsAllowed += 1; homeRunsAllowed += 1
         case .walk:                     walksAllowed += 1
-        case .strikeout:                strikeouts += 1
+        case .strikeout, .strikeoutLooking: strikeouts += 1
         case .out, .hitByPitch:         break
         }
     }

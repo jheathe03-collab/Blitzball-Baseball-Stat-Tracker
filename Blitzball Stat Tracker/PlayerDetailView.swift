@@ -22,6 +22,10 @@ struct PlayerDetailView: View {
     // Export state: the generated file to share, and any error to surface.
     @State private var exportFile: ExportFile?
     @State private var exportError: String?
+    // For deleting the games that block deleting this player (the "Games" section below).
+    @Environment(\.modelContext) private var modelContext
+    @Query private var allGames: [Game]
+    @State private var gameToDelete: Game?
 
     private var batting: BattingStats { player.battingStats(mode: selectedMode, year: selectedYear, season: selectedSeason) }
     private var pitching: PitchingStats { player.pitchingStats(mode: selectedMode, year: selectedYear, season: selectedSeason) }
@@ -31,6 +35,43 @@ struct PlayerDetailView: View {
     private var inningsPitchedText: String {
         let outs = pitching.outsRecorded
         return "\(outs / 3).\(outs % 3)"
+    }
+
+    /// Every game this player is part of (a stat line, or as pitcher/runner/DH) — i.e. exactly the
+    /// games that block deleting the player. Newest first.
+    private var playerGames: [Game] {
+        allGames.filter { game in
+            game.homePitcher === player || game.awayPitcher === player
+            || game.runnerFirst === player || game.runnerSecond === player
+            || game.runnerThird === player || game.designatedHitter === player
+            || game.statLines.contains { $0.player === player }
+        }
+        .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    // Extracted from `body` to keep each view small enough for the Swift type-checker.
+    @ViewBuilder
+    private var gamesSection: some View {
+        if !playerGames.isEmpty {
+            Section {
+                ForEach(playerGames, id: \.persistentModelID) { game in
+                    gameRow(game)
+                        .swipeActions(edge: .trailing) {
+                            if game.season == nil {
+                                Button(role: .destructive) { gameToDelete = game } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                }
+            } header: {
+                Text("Games").foregroundStyle(.white)
+            } footer: {
+                Text("Swipe a game to delete it (this frees the player to be deleted). Season games are removed by deleting the season in Resume Season.")
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            .blitzCardRow()
+        }
     }
 
     // Extracted from `body` to keep each view small enough for the Swift type-checker.
@@ -96,6 +137,7 @@ struct PlayerDetailView: View {
                 StatCell(label: "R", value: "\(batting.runsScored)")
                 StatCell(label: "BB", value: "\(batting.walks)")
                 StatCell(label: "K", value: "\(batting.strikeouts)")
+                StatCell(label: "Kʟ", value: "\(batting.strikeoutsLooking)")
                 StatCell(label: "HBP", value: "\(batting.hitByPitch)")
             }
             .blitzCardRow()
@@ -120,6 +162,9 @@ struct PlayerDetailView: View {
                 StatCell(label: "QS", value: "\(pitching.qualityStarts)")
             }
             .blitzCardRow()
+
+            // Every game this player is in — swipe to delete (frees the player to be deleted).
+            gamesSection
         }
         .blitzListStyle()
         .navigationTitle(player.name)
@@ -153,6 +198,15 @@ struct PlayerDetailView: View {
         } message: {
             Text(exportError ?? "")
         }
+        .alert("Delete Game?", isPresented: gameDeleteBinding, presenting: gameToDelete) { game in
+            Button("Delete Game", role: .destructive) {
+                modelContext.delete(game)
+                gameToDelete = nil
+            }
+            Button("Cancel", role: .cancel) { gameToDelete = nil }
+        } message: { _ in
+            Text("This permanently deletes this game and everyone's stats from it. This can't be undone.")
+        }
     }
 
     // MARK: - Export
@@ -182,6 +236,37 @@ struct PlayerDetailView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return "\(base)-stats-\(formatter.string(from: .now)).json"
+    }
+
+    // MARK: - Games
+
+    private var gameDeleteBinding: Binding<Bool> {
+        Binding(get: { gameToDelete != nil }, set: { if !$0 { gameToDelete = nil } })
+    }
+
+    private func gameRow(_ game: Game) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(game.homeTeam?.name ?? "Home") \(game.homeScore)–\(game.awayScore) \(game.awayTeam?.name ?? "Away")")
+                .font(.subheadline)
+                .foregroundStyle(.white)
+            Text(gameSubtitle(game))
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+        }
+    }
+
+    private func gameSubtitle(_ game: Game) -> String {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        let date = df.string(from: game.createdAt)
+        let kind: String
+        switch game.mode {
+        case .exhibition: kind = "Exhibition"
+        case .season:     kind = (game.season?.name).flatMap { $0.isEmpty ? nil : $0 } ?? "Season"
+        case .tournament: kind = "Tournament"
+        }
+        let status = game.status == .final ? "" : (game.status == .setup ? " · Setup" : " · In progress")
+        return "\(kind) · \(date)\(status)"
     }
 }
 

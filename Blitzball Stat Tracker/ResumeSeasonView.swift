@@ -31,7 +31,7 @@ struct ResumeSeasonView: View {
         Group {
             if inProgress.isEmpty {
                 ContentUnavailableView {
-                    Label("No Seasons in Progress", systemImage: "play.slash")
+                    Label("No Seasons in Progress", systemImage: "play.slash.fill")
                 } description: {
                     Text("Start a season from New Season, then come back here to play its games.")
                 }

@@ -65,9 +65,18 @@ struct SelectTeamsView: View {
     @State private var showingDHPicker = false
     @State private var showStartConfirm = false
     @State private var startGame = false
+    @State private var showPitcherWarning = false
 
     private var bothTeamsChosen: Bool {
         game.homeTeam != nil && game.awayTeam != nil
+    }
+
+    private var pitcherWarningMessage: String {
+        var missing: [String] = []
+        if game.homePitcher == nil { missing.append(game.homeTeam?.name ?? "the home team") }
+        if game.awayPitcher == nil { missing.append(game.awayTeam?.name ?? "the away team") }
+        let teams = missing.joined(separator: " and ")
+        return "Set a starting pitcher for \(teams) before starting the game — use the Starting Pitcher option under each team."
     }
 
     var body: some View {
@@ -164,9 +173,13 @@ struct SelectTeamsView: View {
                     }
                 }
 
-                // Gated until both teams are chosen. Confirms before opening the live game.
+                // Gated until both teams are chosen. Also requires a starting pitcher per side.
                 Button {
-                    showStartConfirm = true
+                    if game.homePitcher == nil || game.awayPitcher == nil {
+                        showPitcherWarning = true
+                    } else {
+                        showStartConfirm = true
+                    }
                 } label: {
                     Label("Start Game", systemImage: "play.fill")
                         .fontWeight(.semibold)
@@ -202,6 +215,11 @@ struct SelectTeamsView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Starting a \(game.settings.matchedType.displayName) game.")
+        }
+        .alert("Set a Starting Pitcher", isPresented: $showPitcherWarning) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(pitcherWarningMessage)
         }
         // Build/refresh both lineups so the team cards show the current batting order.
         .onAppear { syncLineups() }

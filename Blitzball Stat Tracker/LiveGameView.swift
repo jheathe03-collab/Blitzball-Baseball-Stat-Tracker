@@ -27,6 +27,10 @@ struct LiveGameView: View {
     // A blocked pitcher change (All-Team-Pitch), held to offer an injury override.
     @State private var pitcherChangeError: String?
     @State private var pendingPitcher: Player?
+    // Ghost-off "Run" button: the runner being scored (drives the RBI picker) + the who-scored chooser.
+    @State private var runToScore: RunToScore?
+    @State private var showRunnerChooser = false
+    @State private var showGameOver = false
 
     var body: some View {
         // Once the game is over, this same screen becomes the box score.
@@ -46,6 +50,7 @@ struct LiveGameView: View {
                     BasesDiamond(game: game) { index in
                         editingBase = BaseSelection(index: index)
                     }
+                    runButton
                     Divider()
                     batterSection
                     Divider()
@@ -123,6 +128,63 @@ struct LiveGameView: View {
                 Text("These players haven't pitched yet: \(unpitched.map(\.name).joined(separator: ", ")). End the game anyway?")
             }
         }
+        .confirmationDialog("Who scored?", isPresented: $showRunnerChooser, titleVisibility: .visible) {
+            ForEach(runnersOnBase, id: \.index) { runner in
+                Button("\(runner.player.name) — \(baseName(runner.index))") {
+                    runToScore = RunToScore(base: runner.index)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+        .sheet(item: $runToScore) { run in
+            RBIPicker(lineup: game.battingLineup, justBatted: game.previousBatterLine) { rbiLine in
+                perform { game.scoreRunner(onBase: run.base, rbiTo: rbiLine) }
+            }
+        }
+        .alert("Game Over", isPresented: $showGameOver) {
+            Button("OK") { game.status = .final }
+        } message: {
+            Text(gameOverMessage)
+        }
+    }
+
+    // MARK: - Score a run (ghost-off discretionary scoring)
+
+    /// Runners currently on base, with their base index (0/1/2 = 1st/2nd/3rd).
+    private var runnersOnBase: [(index: Int, player: Player)] {
+        (0..<3).compactMap { i in game.runner(onBase: i).map { (i, $0) } }
+    }
+
+    private var runButton: some View {
+        Button { startScoringRun() } label: {
+            Label("Run", systemImage: "figure.run")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.orange)
+        .disabled(runnersOnBase.isEmpty)
+    }
+
+    /// One runner → straight to the RBI step; multiple → ask who scored first.
+    private func startScoringRun() {
+        let runners = runnersOnBase
+        if runners.count == 1 {
+            runToScore = RunToScore(base: runners[0].index)
+        } else if runners.count > 1 {
+            showRunnerChooser = true
+        }
+    }
+
+    private var gameOverMessage: String {
+        let home = game.homeTeam?.name ?? "Home"
+        let away = game.awayTeam?.name ?? "Away"
+        let homeScore = game.homeScore
+        let awayScore = game.awayScore
+        if homeScore == awayScore {
+            return "Final: \(away) \(awayScore), \(home) \(homeScore) — tie game."
+        }
+        let winner = homeScore > awayScore ? home : away
+        return "\(winner) win! Final: \(away) \(awayScore), \(home) \(homeScore)."
     }
 
     // MARK: - Undo plumbing
@@ -132,6 +194,10 @@ struct LiveGameView: View {
         undoStack.append(game.snapshot())
         if undoStack.count > 100 { undoStack.removeFirst(undoStack.count - 100) }
         action()
+        // Innings rule: if this play (or run) ended the game, surface the Game Over popup.
+        if game.status == .inProgress && game.isComplete {
+            showGameOver = true
+        }
     }
 
     private func undo() {
@@ -307,6 +373,54 @@ struct LiveGameView: View {
 private struct BaseSelection: Identifiable {
     let id = UUID()
     let index: Int
+}
+
+// The runner being sent home via the "Run" button (drives the RBI picker sheet).
+private struct RunToScore: Identifiable {
+    let id = UUID()
+    let base: Int
+}
+
+// Pick who gets the RBI for a manually-scored run — or "No RBI" (wild pitch / error).
+private struct RBIPicker: View {
+    let lineup: [GameStatLine]
+    let justBatted: GameStatLine?
+    let onSelect: (GameStatLine?) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // The batter who just hit is usually the RBI — surface them first, one tap.
+                if let justBatted, let name = justBatted.player?.name {
+                    Section("Just batted (most likely)") {
+                        Button {
+                            onSelect(justBatted); dismiss()
+                        } label: {
+                            HStack {
+                                Text(name).fontWeight(.semibold)
+                                Spacer()
+                                Image(systemName: "figure.baseball").foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                Section("Credit RBI to") {
+                    ForEach(lineup, id: \.persistentModelID) { line in
+                        Button(line.player?.name ?? "—") { onSelect(line); dismiss() }
+                    }
+                }
+                Section {
+                    Button("No RBI (wild pitch / error)") { onSelect(nil); dismiss() }
+                }
+            }
+            .navigationTitle("RBI to?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            }
+        }
+    }
 }
 
 // MARK: - Scoreboard

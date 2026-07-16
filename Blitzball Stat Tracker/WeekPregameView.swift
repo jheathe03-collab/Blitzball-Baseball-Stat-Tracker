@@ -17,10 +17,19 @@ struct WeekPregameView: View {
     @State private var showingDHPicker = false
     @State private var showStartConfirm = false
     @State private var startGame = false
+    @State private var showPitcherWarning = false
 
     // Both teams come from the schedule; we just need players to field a lineup.
     private var ready: Bool {
         (game.homeTeam?.players.isEmpty == false) && (game.awayTeam?.players.isEmpty == false)
+    }
+
+    private var pitcherWarningMessage: String {
+        var missing: [String] = []
+        if game.homePitcher == nil { missing.append(game.homeTeam?.name ?? "the home team") }
+        if game.awayPitcher == nil { missing.append(game.awayTeam?.name ?? "the away team") }
+        let teams = missing.joined(separator: " and ")
+        return "Set a starting pitcher for \(teams) before starting the game — use the Starting Pitcher option under each team."
     }
 
     var body: some View {
@@ -66,7 +75,11 @@ struct WeekPregameView: View {
 
             Section {
                 Button {
-                    showStartConfirm = true
+                    if game.homePitcher == nil || game.awayPitcher == nil {
+                        showPitcherWarning = true
+                    } else {
+                        showStartConfirm = true
+                    }
                 } label: {
                     Label("Start Game", systemImage: "play.fill")
                         .fontWeight(.semibold)
@@ -92,6 +105,11 @@ struct WeekPregameView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Start Week \(game.weekNumber): \(game.homeTeam?.name ?? "Home") vs \(game.awayTeam?.name ?? "Away").")
+        }
+        .alert("Set a Starting Pitcher", isPresented: $showPitcherWarning) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(pitcherWarningMessage)
         }
         // Build/refresh both lineups so the cards show the current batting order.
         .onAppear { syncLineups() }

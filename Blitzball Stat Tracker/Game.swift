@@ -55,9 +55,9 @@ final class Game {
     @Relationship var homeTeam: Team?
     @Relationship var awayTeam: Team?
 
-    /// The rules for this game (game type, innings, strikes/balls, ...). Stored as a Codable
-    /// struct, the same way Player stores its BattingStats. New games start on Blitzball defaults.
-    var settings: GameSettings
+    /// The rules for this game — stored as a JSON blob (see BlobCoder) so new rules can be added
+    /// later without a schema change. Access via the `settings` computed property (extension below).
+    var settingsData: Data
 
     // MARK: - Live game state (meaningful once the game is in progress)
 
@@ -110,11 +110,17 @@ final class Game {
         self.status = status
         self.homeTeam = homeTeam
         self.awayTeam = awayTeam
-        self.settings = settings
+        self.settingsData = BlobCoder.encode(settings)
     }
 }
 
 extension Game {
+    /// This game's rulebook, decoded from its blob. Setting re-encodes it.
+    var settings: GameSettings {
+        get { BlobCoder.decode(settingsData) ?? .blitzballDefaults }
+        set { settingsData = BlobCoder.encode(newValue) }
+    }
+
     /// Scoreboard run totals, summed from the per-inning arrays.
     var awayScore: Int { awayInningRuns.reduce(0, +) }
     var homeScore: Int { homeInningRuns.reduce(0, +) }

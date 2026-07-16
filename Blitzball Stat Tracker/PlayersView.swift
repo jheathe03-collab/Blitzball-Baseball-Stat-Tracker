@@ -153,9 +153,9 @@ struct PlayersView: View {
                 .map { $0.name.isEmpty ? "an unnamed season" : "\u{201C}\($0.name)\u{201D}" }
                 .sorted()
                 .joined(separator: ", ")
-            return "\(player.name) has played in \(names). Delete those games (or the season) before deleting the player."
+            return "\(player.name) has played in \(names). Delete the season(s) in Season \u{2192} Resume Season first, then delete the player."
         }
-        return "\(player.name) is used in \(using.count) game\(using.count == 1 ? "" : "s"). Delete those games before deleting the player."
+        return "\(player.name) is in \(using.count) game\(using.count == 1 ? "" : "s"). Open \(player.name) and use the Games section (swipe a game to delete) to remove them, then delete the player."
     }
 
     private var playerInUseAlert: Binding<Bool> {

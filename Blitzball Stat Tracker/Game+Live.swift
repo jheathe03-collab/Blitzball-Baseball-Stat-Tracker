@@ -47,6 +47,15 @@ extension Game {
         return lineup[currentBatterIndex % lineup.count]
     }
 
+    /// The batter who JUST completed their at-bat (the order has already advanced) — the most likely
+    /// RBI recipient when you manually score a run.
+    var previousBatterLine: GameStatLine? {
+        let lineup = battingLineup
+        guard !lineup.isEmpty else { return nil }
+        let index = (currentBatterIndex - 1 + lineup.count) % lineup.count
+        return lineup[index]
+    }
+
     /// The ACTIVE pitcher is the fielding side's current pitcher.
     var activePitcher: Player? {
         get { battingIsHome ? awayPitcher : homePitcher }
@@ -173,7 +182,7 @@ extension Game {
                     batter: batter, batterPlayer: batterPlayer
                 )
             }
-        case .out, .strikeout:
+        case .out, .strikeout, .strikeoutLooking:
             break // runners hold
         }
 
@@ -183,7 +192,11 @@ extension Game {
             if battingIsHome { awayPitcherOuts += 1 } else { homePitcherOuts += 1 }
         }
         advanceBatter()
-        if outs >= settings.outsPerInning { advanceHalfInning() }
+        // End by the innings rule (leave the state where it is so the view can show the Game Over
+        // popup), or advance to the next half-inning.
+        if outs >= settings.outsPerInning && !isComplete {
+            advanceHalfInning()
+        }
     }
 
     /// Move players per the base-advancement result, credit runs + RBI, and place survivors.
@@ -220,6 +233,16 @@ extension Game {
         }
         creditRunToInning()
         creditRunToPitcher()
+    }
+
+    /// Manually score the runner on `baseIndex` (they advanced home on their own — e.g. from 1st on
+    /// a triple with ghost runners off), optionally crediting an RBI to `rbiLine`. Clears that base.
+    /// Powers the "Run" button; scoring + pitcher runs allowed are handled by `scoreRun`.
+    func scoreRunner(onBase baseIndex: Int, rbiTo rbiLine: GameStatLine?) {
+        guard let runnerPlayer = runner(onBase: baseIndex) else { return }
+        scoreRun(by: runnerPlayer)
+        setRunner(nil, onBase: baseIndex)
+        if let rbiLine { rbiLine.batting.rbi += 1 }
     }
 
     private func advanceBatter() {
@@ -272,5 +295,31 @@ extension Game {
     /// The half-inning label, e.g. "Top 3" / "Bot 5".
     var halfInningLabel: String {
         "\(isTopInning ? "Top" : "Bot") \(currentInning)"
+    }
+
+    /// Whether the game is finished by the Innings rule, given the current score/inning/outs.
+    /// Checked by the live view after each play to show the Game Over popup. Cases:
+    /// - **Walk-off / home ahead** in the bottom of the final-or-later inning → over immediately.
+    /// - **Top of final+ inning done** and home already leads → over (home doesn't bat the bottom).
+    /// - **Bottom of final+ inning done**: someone leads → over; tied → over only if Extra Innings
+    ///   is off (a tie), otherwise play on.
+    var isComplete: Bool {
+        let final = settings.innings
+        guard currentInning >= final else { return false }
+
+        // Home ahead in the bottom half of a final-or-later inning ends it the instant it happens.
+        if !isTopInning && homeScore > awayScore { return true }
+
+        // The remaining cases only trigger once the current half-inning is complete.
+        guard outs >= settings.outsPerInning else { return false }
+
+        if isTopInning {
+            // Away just finished the top of the final+ inning; home skips the bottom if already up.
+            return homeScore > awayScore
+        } else {
+            // Home just finished the bottom of the final+ inning.
+            if homeScore != awayScore { return true }   // decided
+            return !settings.extraInnings               // tie ends the game only without extras
+        }
     }
 }

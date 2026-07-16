@@ -20,8 +20,9 @@ final class Season {
     var name: String
     /// Number of weekly games (one matchup per week).
     var gamesPerSeason: Int
-    /// The rulebook applied to every game this season (same GameSettings as exhibition).
-    var settings: GameSettings
+    /// The rulebook applied to every game this season — stored as a JSON blob (see BlobCoder) so
+    /// new rules can be added later without a schema change. Access via `settings` (extension below).
+    var settingsData: Data
     var status: SeasonStatus
     var createdAt: Date
 
@@ -37,8 +38,16 @@ final class Season {
     ) {
         self.name = name
         self.gamesPerSeason = gamesPerSeason
-        self.settings = settings
+        self.settingsData = BlobCoder.encode(settings)
         self.status = status
         self.createdAt = createdAt
+    }
+}
+
+extension Season {
+    /// This season's rulebook, decoded from its blob. Setting re-encodes it.
+    var settings: GameSettings {
+        get { BlobCoder.decode(settingsData) ?? .blitzballDefaults }
+        set { settingsData = BlobCoder.encode(newValue) }
     }
 }

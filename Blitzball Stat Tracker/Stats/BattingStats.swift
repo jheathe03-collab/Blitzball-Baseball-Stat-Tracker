@@ -38,6 +38,8 @@ public struct BattingStats: Codable, Hashable, Sendable {
     public var strikeouts: Int
     /// Sacrifice flies (an out that scores a runner — doesn't count as an at-bat, but does affect OBP).
     public var sacrificeFlies: Int
+    /// Strikeouts LOOKING — the "backwards K" (called third strike). A subset of `strikeouts`.
+    public var strikeoutsLooking: Int
 
     /// A memberwise initializer with sensible defaults, so you can create an empty line with
     /// `BattingStats()` and fill in only what you have.
@@ -53,7 +55,8 @@ public struct BattingStats: Codable, Hashable, Sendable {
         walks: Int = 0,
         hitByPitch: Int = 0,
         strikeouts: Int = 0,
-        sacrificeFlies: Int = 0
+        sacrificeFlies: Int = 0,
+        strikeoutsLooking: Int = 0
     ) {
         self.plateAppearances = plateAppearances
         self.atBats = atBats
@@ -67,6 +70,7 @@ public struct BattingStats: Codable, Hashable, Sendable {
         self.hitByPitch = hitByPitch
         self.strikeouts = strikeouts
         self.sacrificeFlies = sacrificeFlies
+        self.strikeoutsLooking = strikeoutsLooking
     }
 
     // MARK: - Derived building blocks
@@ -133,8 +137,38 @@ extension BattingStats {
             walks: lhs.walks + rhs.walks,
             hitByPitch: lhs.hitByPitch + rhs.hitByPitch,
             strikeouts: lhs.strikeouts + rhs.strikeouts,
-            sacrificeFlies: lhs.sacrificeFlies + rhs.sacrificeFlies
+            sacrificeFlies: lhs.sacrificeFlies + rhs.sacrificeFlies,
+            strikeoutsLooking: lhs.strikeoutsLooking + rhs.strikeoutsLooking
         )
+    }
+}
+
+// MARK: - Lenient decoding (this is what makes adding a stat data-safe)
+
+extension BattingStats {
+    // Blobs saved before a stat existed lack its key. Decoding each field with `decodeIfPresent`
+    // (default 0) means old lines still load with all their real stats intact and any NEW stat at 0
+    // — instead of the decode failing and zeroing the whole line. Encoding stays auto-synthesized.
+    private enum CodingKeys: String, CodingKey {
+        case plateAppearances, atBats, hits, doubles, triples, homeRuns, rbi
+        case runsScored, walks, hitByPitch, strikeouts, sacrificeFlies, strikeoutsLooking
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        plateAppearances = try c.decodeIfPresent(Int.self, forKey: .plateAppearances) ?? 0
+        atBats = try c.decodeIfPresent(Int.self, forKey: .atBats) ?? 0
+        hits = try c.decodeIfPresent(Int.self, forKey: .hits) ?? 0
+        doubles = try c.decodeIfPresent(Int.self, forKey: .doubles) ?? 0
+        triples = try c.decodeIfPresent(Int.self, forKey: .triples) ?? 0
+        homeRuns = try c.decodeIfPresent(Int.self, forKey: .homeRuns) ?? 0
+        rbi = try c.decodeIfPresent(Int.self, forKey: .rbi) ?? 0
+        runsScored = try c.decodeIfPresent(Int.self, forKey: .runsScored) ?? 0
+        walks = try c.decodeIfPresent(Int.self, forKey: .walks) ?? 0
+        hitByPitch = try c.decodeIfPresent(Int.self, forKey: .hitByPitch) ?? 0
+        strikeouts = try c.decodeIfPresent(Int.self, forKey: .strikeouts) ?? 0
+        sacrificeFlies = try c.decodeIfPresent(Int.self, forKey: .sacrificeFlies) ?? 0
+        strikeoutsLooking = try c.decodeIfPresent(Int.self, forKey: .strikeoutsLooking) ?? 0
     }
 }
 
