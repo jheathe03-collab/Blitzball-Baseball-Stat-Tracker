@@ -61,7 +61,7 @@ struct GameSummaryView: View {
                 // After a game ends, offer a one-tap return to the menu.
                 if game.status == .final {
                     Button {
-                        router.popToRoot()
+                        router.returnToMainMenu()
                     } label: {
                         Label("Back to Main Menu", systemImage: "house.fill")
                             .frame(maxWidth: .infinity)

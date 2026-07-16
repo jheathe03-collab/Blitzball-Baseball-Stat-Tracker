@@ -22,11 +22,15 @@ struct GameSettingsEditor: View {
                 .pickerStyle(.segmented)
             } footer: {
                 Text("Switching type resets all options to that type's defaults.")
+                    .foregroundStyle(.white.opacity(0.6))
             }
+            .blitzCardRow()
 
-            Section("Rules") {
+            Section(header: Text("Rules").foregroundStyle(.white)) {
                 Stepper("Innings: \(settings.innings)",
                         value: $settings.innings, in: GameSettings.inningsRange)
+                Stepper("Outs Per Inning: \(settings.outsPerInning)",
+                        value: $settings.outsPerInning, in: GameSettings.outsRange)
 
                 Toggle("Extra Innings", isOn: $settings.extraInnings)
                 Toggle("Substitutions", isOn: $settings.substitutions)
@@ -44,11 +48,13 @@ struct GameSettingsEditor: View {
                 Stepper("Challenges: \(settings.challenges)",
                         value: $settings.challenges, in: GameSettings.challengesRange)
             }
+            .blitzCardRow()
 
             Section {
                 Button("Reset to Blitzball Defaults") { settings = .blitzballDefaults }
                 Button("Reset to Baseball Defaults") { settings = .baseballDefaults }
             }
+            .blitzCardRow()
         }
     }
 

@@ -143,40 +143,38 @@ extension Game {
         batter.batting.record(outcome)
         activePitcherLine?.pitching.recordAllowed(outcome)
 
-        // Base movement + auto-scoring is the GHOST RUNNERS rule set — only applied when that
-        // Game Option is on. (Non-ghost base logic will be built later.) The raw counting stats
-        // above are always recorded either way.
-        if settings.ghostRunners {
+        // Base movement + auto-scoring. Ghost runners ON ⇒ every runner is forced up by the hit;
+        // OFF ⇒ we place the batter and force runners only when their base is needed (you advance
+        // the discretionary ones by hand on the diamond). Walks/HBP force only as needed in both
+        // modes. Raw counting stats above are recorded regardless.
+        switch outcome {
+        case .single, .double, .triple, .homeRun:
+            let baseCount: Int
             switch outcome {
-            case .single, .double, .triple, .homeRun:
-                let baseCount: Int
-                switch outcome {
-                case .single: baseCount = 1
-                case .double: baseCount = 2
-                case .triple: baseCount = 3
-                default:      baseCount = 4
-                }
-                applyAdvance(
-                    BaseRunning.advanceOnHit(bases: runnerTokens, batter: 3, baseCount: baseCount),
-                    batter: batter, batterPlayer: batterPlayer
-                )
-            case .walk:
+            case .single: baseCount = 1
+            case .double: baseCount = 2
+            case .triple: baseCount = 3
+            default:      baseCount = 4
+            }
+            let advance = settings.ghostRunners
+                ? BaseRunning.advanceOnHit(bases: runnerTokens, batter: 3, baseCount: baseCount)
+                : BaseRunning.advanceForcedHit(bases: runnerTokens, batter: 3, baseCount: baseCount)
+            applyAdvance(advance, batter: batter, batterPlayer: batterPlayer)
+        case .walk:
+            applyAdvance(
+                BaseRunning.advanceOnWalk(bases: runnerTokens, batter: 3),
+                batter: batter, batterPlayer: batterPlayer
+            )
+        case .hitByPitch:
+            // HBP only puts the batter on base (walk-style) when the HBP Walks rule is on.
+            if settings.hbpWalks {
                 applyAdvance(
                     BaseRunning.advanceOnWalk(bases: runnerTokens, batter: 3),
                     batter: batter, batterPlayer: batterPlayer
                 )
-            case .hitByPitch:
-                // HBP only puts the batter on base (walk-style) when the HBP Walks rule is on.
-                // Blitzball default: off — no free base on a hit-by-pitch.
-                if settings.hbpWalks {
-                    applyAdvance(
-                        BaseRunning.advanceOnWalk(bases: runnerTokens, batter: 3),
-                        batter: batter, batterPlayer: batterPlayer
-                    )
-                }
-            case .out, .strikeout:
-                break // runners hold
             }
+        case .out, .strikeout:
+            break // runners hold
         }
 
         if outcome.isOut {
@@ -185,7 +183,7 @@ extension Game {
             if battingIsHome { awayPitcherOuts += 1 } else { homePitcherOuts += 1 }
         }
         advanceBatter()
-        if outs >= 3 { advanceHalfInning() }
+        if outs >= settings.outsPerInning { advanceHalfInning() }
     }
 
     /// Move players per the base-advancement result, credit runs + RBI, and place survivors.

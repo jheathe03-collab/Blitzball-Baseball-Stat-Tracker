@@ -30,10 +30,19 @@ final class Router {
     /// The Season area's navigation stack. Setting/truncating this pops season screens in one go.
     var seasonPath: [SeasonRoute] = []
 
+    /// Bumped to ask RootView to replay the launch splash animation (used on "Back to Main Menu").
+    var splashRequestID = UUID()
+
     func popToRoot() {
         // Clear the season stack too, so a rebuild doesn't immediately re-push season screens.
         seasonPath.removeAll()
         resetID = UUID()
+    }
+
+    /// Pop all the way to the main menu AND replay the Blitzball splash animation over the return.
+    func returnToMainMenu() {
+        popToRoot()
+        splashRequestID = UUID()
     }
 
     /// Unwind the Season area back to its hub (Season Mode) in a single animation.

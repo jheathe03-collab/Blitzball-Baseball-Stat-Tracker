@@ -35,6 +35,7 @@ struct ResumeSeasonView: View {
                 } description: {
                     Text("Start a season from New Season, then come back here to play its games.")
                 }
+                .foregroundStyle(.white)
             } else {
                 List {
                     ForEach(inProgress) { season in
@@ -55,10 +56,13 @@ struct ResumeSeasonView: View {
                             }
                         }
                     }
+                    .blitzCardRow()
                 }
+                .blitzListStyle()
             }
         }
         .navigationTitle("Resume Season")
+        .blitzballBackground()
         .navigationBarTitleDisplayMode(.inline)
         .alert("Delete Season?", isPresented: confirmingDelete, presenting: seasonToDelete) { season in
             Button("Delete Season", role: .destructive) { delete(season) }
@@ -101,11 +105,14 @@ struct SeasonGamesView: View {
                         weekRow(game)
                     }
                 }
+                .blitzCardRow()
             } footer: {
                 Text("\(season.gamesPlayed) of \(season.gamesPerSeason) games played.")
             }
         }
         .navigationTitle(season.name.isEmpty ? "Season" : season.name)
+        .blitzballBackground()
+        .blitzListStyle()
         .navigationBarTitleDisplayMode(.inline)
         // Replace the default back arrow with a jump straight to the Season Mode menu.
         .navigationBarBackButtonHidden(true)

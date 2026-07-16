@@ -33,38 +33,46 @@ struct PlayerDetailView: View {
         return "\(outs / 3).\(outs % 3)"
     }
 
+    // Extracted from `body` to keep each view small enough for the Swift type-checker.
+    @ViewBuilder
+    private var filterSection: some View {
+        Section(header: Text("Filter").foregroundStyle(.white)) {
+            Picker("Mode", selection: $selectedMode) {
+                Text("All").tag(GameMode?.none)
+                ForEach(GameMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(GameMode?.some(mode))
+                }
+            }
+            // Sub-filter: when viewing Season stats, narrow to one specific season.
+            if selectedMode == .season && !player.statSeasons.isEmpty {
+                Picker("Season", selection: $selectedSeason) {
+                    Text("All Seasons").tag(Season?.none)
+                    ForEach(player.statSeasons, id: \.persistentModelID) { season in
+                        Text(season.name.isEmpty ? "Untitled Season" : season.name)
+                            .tag(Season?.some(season))
+                    }
+                }
+            }
+            Picker("Year", selection: $selectedYear) {
+                Text("All").tag(Int?.none)
+                ForEach(player.statYears, id: \.self) { year in
+                    Text(String(year)).tag(Int?.some(year))
+                }
+            }
+        }
+        // Leaving Season mode clears the season sub-filter so it can't silently apply.
+        .onChange(of: selectedMode) {
+            if selectedMode != .season { selectedSeason = nil }
+        }
+        .blitzCardRow()
+        .tint(.white)   // white picker values/chevrons on the dark card
+    }
+
     var body: some View {
         List {
-            Section("Filter") {
-                Picker("Mode", selection: $selectedMode) {
-                    Text("All").tag(GameMode?.none)
-                    ForEach(GameMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(GameMode?.some(mode))
-                    }
-                }
-                // Sub-filter: when viewing Season stats, narrow to one specific season.
-                if selectedMode == .season && !player.statSeasons.isEmpty {
-                    Picker("Season", selection: $selectedSeason) {
-                        Text("All Seasons").tag(Season?.none)
-                        ForEach(player.statSeasons, id: \.persistentModelID) { season in
-                            Text(season.name.isEmpty ? "Untitled Season" : season.name)
-                                .tag(Season?.some(season))
-                        }
-                    }
-                }
-                Picker("Year", selection: $selectedYear) {
-                    Text("All").tag(Int?.none)
-                    ForEach(player.statYears, id: \.self) { year in
-                        Text(String(year)).tag(Int?.some(year))
-                    }
-                }
-            }
-            // Leaving Season mode clears the season sub-filter so it can't silently apply.
-            .onChange(of: selectedMode) {
-                if selectedMode != .season { selectedSeason = nil }
-            }
+            filterSection
 
-            Section("Batting") {
+            Section(header: Text("Batting").foregroundStyle(.white)) {
                 StatCell(label: "AVG", value: StatFormat.rate(batting.battingAverage))
                 StatCell(label: "OBP", value: StatFormat.rate(batting.onBasePercentage))
                 StatCell(label: "SLG", value: StatFormat.rate(batting.sluggingPercentage))
@@ -72,9 +80,10 @@ struct PlayerDetailView: View {
                 StatCell(label: "BB%", value: StatFormat.percent(batting.walkRate))
                 StatCell(label: "K%", value: StatFormat.percent(batting.strikeoutRate))
             }
+            .blitzCardRow()
 
             // Raw counting stats (the box-score numbers) for the current filter.
-            Section("Batting Totals") {
+            Section(header: Text("Batting Totals").foregroundStyle(.white)) {
                 StatCell(label: "G", value: "\(games)")
                 StatCell(label: "PA", value: "\(batting.plateAppearances)")
                 StatCell(label: "AB", value: "\(batting.atBats)")
@@ -89,8 +98,9 @@ struct PlayerDetailView: View {
                 StatCell(label: "K", value: "\(batting.strikeouts)")
                 StatCell(label: "HBP", value: "\(batting.hitByPitch)")
             }
+            .blitzCardRow()
 
-            Section("Pitching") {
+            Section(header: Text("Pitching").foregroundStyle(.white)) {
                 StatCell(label: "ERA", value: StatFormat.ratio(pitching.earnedRunAverage))
                 StatCell(label: "WHIP", value: StatFormat.ratio(pitching.walksAndHitsPerInning))
                 StatCell(label: "K/BB", value: StatFormat.ratio(pitching.strikeoutToWalkRatio))
@@ -98,7 +108,7 @@ struct PlayerDetailView: View {
             }
 
             // Raw pitching counting stats for the current filter.
-            Section("Pitching Totals") {
+            Section(header: Text("Pitching Totals").foregroundStyle(.white)) {
                 StatCell(label: "IP", value: inningsPitchedText)
                 StatCell(label: "H", value: "\(pitching.hitsAllowed)")
                 StatCell(label: "R", value: "\(pitching.runsAllowed)")
@@ -109,10 +119,12 @@ struct PlayerDetailView: View {
                 StatCell(label: "SV", value: "\(pitching.saves)")
                 StatCell(label: "QS", value: "\(pitching.qualityStarts)")
             }
-            
-          
+            .blitzCardRow()
         }
+        .blitzListStyle()
         .navigationTitle(player.name)
+        .blitzballBackground()
+        .blitzNavBar()
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -196,7 +208,7 @@ private struct StatCell: View {
     var body: some View {
         HStack {
             Text(label)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.85))
             Spacer()
             Text(value)
                 .font(.body.monospacedDigit()) // digits line up neatly column-to-column

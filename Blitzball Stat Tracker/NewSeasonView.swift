@@ -22,6 +22,7 @@ struct NewSeasonView: View {
             }
         }
         .navigationTitle("New Season")
+        .blitzballBackground()
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: loadOrCreate)
     }
@@ -50,12 +51,15 @@ private struct NewSeasonForm: View {
     var body: some View {
         Form {
             Section {
-                TextField("Season Name", text: $season.name)
+                TextField("", text: $season.name,
+                          prompt: Text("Season Name").foregroundStyle(.white.opacity(0.5)))
                 Stepper("Games Per Season: \(season.gamesPerSeason)",
                         value: $season.gamesPerSeason, in: 1...30)
             } footer: {
                 Text("The name is used to filter this season's stats later.")
+                    .foregroundStyle(.white.opacity(0.6))
             }
+            .blitzCardRow()
 
             Section {
                 NavigationLink {
@@ -79,6 +83,7 @@ private struct NewSeasonForm: View {
                     }
                 }
             }
+            .blitzCardRow()
 
             Section {
                 Button {
@@ -90,8 +95,10 @@ private struct NewSeasonForm: View {
             } footer: {
                 if !season.isScheduleComplete {
                     Text("Set every week's matchup before starting the season.")
+                        .foregroundStyle(.white.opacity(0.6))
                 }
             }
+            .blitzCardRow()
         }
         // Resize the schedule whenever the number of games changes.
         .onChange(of: season.gamesPerSeason) {

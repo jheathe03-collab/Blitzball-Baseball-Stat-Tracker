@@ -41,7 +41,7 @@ struct SubstitutionView: View {
                 comingOutSection(isHome: false, teamName: game.awayTeam?.name ?? "Away")
                 comingOutSection(isHome: true, teamName: game.homeTeam?.name ?? "Home")
 
-                Section("Coming In") {
+                Section(header: Text("Coming In").foregroundStyle(.white)) {
                     Button {
                         showingNewPlayer = true
                     } label: {
@@ -53,9 +53,12 @@ struct SubstitutionView: View {
                         }
                     }
                 }
+                .blitzCardRow()
             }
+            .blitzListStyle()
             .navigationTitle("Substitute Player")
             .navigationBarTitleDisplayMode(.inline)
+            .blitzballBackground()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -77,26 +80,28 @@ struct SubstitutionView: View {
     private func comingOutSection(isHome: Bool, teamName: String) -> some View {
         let lines = activeLines(isHome: isHome)
         if !lines.isEmpty {
-            Section("Coming Out — \(teamName)") {
+            Section(header: Text("Coming Out — \(teamName)").foregroundStyle(.white)) {
                 ForEach(lines) { line in
                     selectRow(title: line.player?.name ?? "—", selected: outLine === line) {
                         outLine = line
                     }
                 }
             }
+            .blitzCardRow()
         }
     }
 
     private func selectRow(title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Text(title).foregroundStyle(.primary)
+                Text(title).foregroundStyle(.white)
                 Spacer()
                 if selected {
                     Image(systemName: "checkmark").foregroundStyle(.tint)
                 }
             }
         }
+        .buttonStyle(.plain)
     }
 
     private func createAndSelectNewPlayer() {

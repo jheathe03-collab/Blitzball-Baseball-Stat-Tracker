@@ -25,24 +25,29 @@ struct DesignatedHitterPicker: View {
                         Label("Create New Player", systemImage: "plus")
                     }
                 }
-                Section("Players") {
+                .blitzCardRow()
+                Section(header: Text("Players").foregroundStyle(.white)) {
                     ForEach(allPlayers) { player in
                         Button {
                             choose(player)
                         } label: {
                             HStack {
-                                Text(player.name).foregroundStyle(.primary)
+                                Text(player.name).foregroundStyle(.white)
                                 Spacer()
                                 if game.designatedHitter === player {
                                     Image(systemName: "checkmark").foregroundStyle(.tint)
                                 }
                             }
                         }
+                        .buttonStyle(.plain)
                     }
+                    .blitzCardRow()
                 }
             }
+            .blitzListStyle()
             .navigationTitle("Designated Hitter")
             .navigationBarTitleDisplayMode(.inline)
+            .blitzballBackground()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }

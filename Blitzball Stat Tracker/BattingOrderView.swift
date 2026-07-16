@@ -42,6 +42,7 @@ struct BattingOrderView: View {
         }
         .navigationTitle("Batting Order")
         .navigationBarTitleDisplayMode(.inline)
+        .blitzballBackground()
         .toolbar {
             EditButton()
         }

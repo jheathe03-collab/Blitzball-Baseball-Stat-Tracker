@@ -24,15 +24,19 @@ struct StartingPitcherView: View {
                 dismiss()
             } label: {
                 HStack {
-                    Text(line.player?.name ?? "—").foregroundStyle(.primary)
+                    Text(line.player?.name ?? "—").foregroundStyle(.white)
                     Spacer()
                     if line.player === current {
                         Image(systemName: "checkmark").foregroundStyle(.tint)
                     }
                 }
             }
+            .buttonStyle(.plain)
+            .blitzCardRow()
         }
+        .blitzListStyle()
         .navigationTitle("Starting Pitcher")
         .navigationBarTitleDisplayMode(.inline)
+        .blitzballBackground()
     }
 }

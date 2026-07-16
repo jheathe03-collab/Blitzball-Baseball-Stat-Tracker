@@ -34,6 +34,7 @@ struct AddExistingPlayerView: View {
                         systemImage: "person.crop.circle.badge.xmark",
                         description: Text("Everyone is already on this team, or you haven't created any players yet.")
                     )
+                    .foregroundStyle(.white)
                 } else {
                     List(availablePlayers) { player in
                         Button {
@@ -42,12 +43,12 @@ struct AddExistingPlayerView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(player.name)
-                                        .foregroundStyle(.primary)
+                                        .foregroundStyle(.white)
                                     // Show the current team for players already assigned elsewhere.
                                     if let currentTeam = player.teams.first {
                                         Text("On \(currentTeam.name)")
                                             .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(.white.opacity(0.6))
                                     }
                                 }
                                 Spacer()
@@ -57,15 +58,19 @@ struct AddExistingPlayerView: View {
                                 } else if !player.teams.isEmpty {
                                     // A lock hints that this player is spoken for.
                                     Image(systemName: "lock.fill")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.white.opacity(0.5))
                                 }
                             }
                         }
+                        .buttonStyle(.plain)
+                        .blitzCardRow()
                     }
+                    .blitzListStyle()
                 }
             }
             .navigationTitle("Add Players")
             .navigationBarTitleDisplayMode(.inline)
+            .blitzballBackground()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

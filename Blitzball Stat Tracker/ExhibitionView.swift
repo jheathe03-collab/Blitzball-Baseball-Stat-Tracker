@@ -32,10 +32,13 @@ struct ExhibitionView: View {
         guard game == nil else { return }
         let descriptor = FetchDescriptor<Game>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         let games = (try? modelContext.fetch(descriptor)) ?? []
-        if let existingSetup = games.first(where: { $0.status == .setup }) {
+        // Only reuse an EXHIBITION draft. Season/tournament games are also created as `.setup`
+        // (scheduled weeks), so without the mode check Exhibition could hijack an unplayed season
+        // week — and finishing it would wrongly mark that week as played.
+        if let existingSetup = games.first(where: { $0.status == .setup && $0.mode == .exhibition }) {
             game = existingSetup
         } else {
-            let newGame = Game()
+            let newGame = Game()   // defaults to mode == .exhibition
             modelContext.insert(newGame)
             game = newGame
         }
@@ -157,7 +160,7 @@ struct SelectTeamsView: View {
                         Spacer()
                         Text(game.settings.matchedType.displayName)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.white.opacity(0.7))
                     }
                 }
 
@@ -172,10 +175,12 @@ struct SelectTeamsView: View {
             } footer: {
                 if !bothTeamsChosen {
                     Text("Pick a Home and Away team to start the game.")
+                        .foregroundStyle(.white.opacity(0.7))
                 }
             }
         }
         .navigationTitle("Select Teams")
+        .blitzballBackground()
         // One sheet serves both slots; `item:` passes in which role we're filling.
         .sheet(item: $picking) { role in
             TeamPickerView(excluding: role == .home ? game.awayTeam : game.homeTeam) { team in
@@ -260,14 +265,14 @@ struct TeamSlot: View {
                 Spacer()
                 Text("Wins \(record.wins)  Losses \(record.losses)")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.65))
                     .monospacedDigit()
             }
 
             if lineup.isEmpty {
                 Text("No players on this team yet.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.65))
             } else {
                 // Players shown in batting order (updates when you edit Batting Order).
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
@@ -275,10 +280,11 @@ struct TeamSlot: View {
                         HStack(spacing: 6) {
                             Text("\(index + 1).")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.white.opacity(0.6))
                                 .monospacedDigit()
                             Text(player.name)
                                 .font(.subheadline)
+                                .foregroundStyle(.white)
                         }
                     }
                 }
@@ -286,7 +292,7 @@ struct TeamSlot: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
 
     // The tappable "empty" state prompting a selection.
@@ -297,10 +303,10 @@ struct TeamSlot: View {
                 Text(role.placeholder)
                 Spacer()
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.white.opacity(0.7))
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
+            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
     }

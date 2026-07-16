@@ -29,6 +29,7 @@ struct SeasonStatsView: View {
                 } description: {
                     Text("Start a season and play some games to see its stats here.")
                 }
+                .foregroundStyle(.white)
             } else {
                 List(visible) { season in
                     NavigationLink {
@@ -42,10 +43,13 @@ struct SeasonStatsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .blitzCardRow()
                 }
+                .blitzListStyle()
             }
         }
         .navigationTitle("Season Stats")
+        .blitzballBackground()
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -62,6 +66,8 @@ struct SeasonStatsDetailView: View {
             pitchingSection
         }
         .navigationTitle(season.name.isEmpty ? "Season" : season.name)
+        .blitzballBackground()
+        .blitzListStyle()
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -69,7 +75,7 @@ struct SeasonStatsDetailView: View {
 
     @ViewBuilder
     private var standingsSection: some View {
-        Section("Standings") {
+        Section(header: Text("Standings").foregroundStyle(.white)) {
             if standings.isEmpty {
                 Text("No teams set for this season yet.")
                     .foregroundStyle(.secondary)
@@ -85,6 +91,7 @@ struct SeasonStatsDetailView: View {
                 }
             }
         }
+        .blitzCardRow()
     }
 
     // Teams ranked by wins (then fewest losses). W-L counts only this season's finished games.
@@ -103,7 +110,7 @@ struct SeasonStatsDetailView: View {
     @ViewBuilder
     private var battingSection: some View {
         if !battingLeaders.isEmpty {
-            Section("Batting") {
+            Section(header: Text("Batting").foregroundStyle(.white)) {
                 ForEach(battingLeaders, id: \.player.persistentModelID) { entry in
                     NavigationLink {
                         PlayerDetailView(player: entry.player)
@@ -118,6 +125,7 @@ struct SeasonStatsDetailView: View {
                     }
                 }
             }
+            .blitzCardRow()
         }
     }
 
@@ -134,7 +142,7 @@ struct SeasonStatsDetailView: View {
     @ViewBuilder
     private var pitchingSection: some View {
         if !pitchingLeaders.isEmpty {
-            Section("Pitching") {
+            Section(header: Text("Pitching").foregroundStyle(.white)) {
                 ForEach(pitchingLeaders, id: \.player.persistentModelID) { entry in
                     NavigationLink {
                         PlayerDetailView(player: entry.player)
@@ -149,6 +157,7 @@ struct SeasonStatsDetailView: View {
                     }
                 }
             }
+            .blitzCardRow()
         }
     }
 

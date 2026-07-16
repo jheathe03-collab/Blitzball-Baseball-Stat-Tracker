@@ -63,6 +63,7 @@ struct AllTeamsStatsView: View {
         }
         .navigationTitle("All Teams Stats")
         .navigationBarTitleDisplayMode(.inline)
+        .blitzballBackground()
     }
 }
 

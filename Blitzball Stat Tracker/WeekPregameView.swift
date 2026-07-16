@@ -79,6 +79,7 @@ struct WeekPregameView: View {
             }
         }
         .navigationTitle("Game Day")
+        .blitzballBackground()
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingDHPicker) {
             DesignatedHitterPicker(game: game)

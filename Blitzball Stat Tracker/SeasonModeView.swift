@@ -13,15 +13,20 @@ struct SeasonModeView: View {
             NavigationLink(value: SeasonRoute.newSeason) {
                 Label("New Season", systemImage: "plus.circle")
             }
+            .blitzCardRow()
             NavigationLink(value: SeasonRoute.resume) {
                 Label("Resume Season", systemImage: "play.circle")
             }
+            .blitzCardRow()
             NavigationLink {
                 SeasonStatsView()
             } label: {
                 Label("Season Stats", systemImage: "chart.bar")
             }
+            .blitzCardRow()
         }
+        .blitzListStyle()
         .navigationTitle("Season Mode")
+        .blitzballBackground(watermark: true)
     }
 }

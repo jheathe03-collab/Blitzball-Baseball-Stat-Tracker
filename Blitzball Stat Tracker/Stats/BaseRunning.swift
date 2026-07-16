@@ -61,4 +61,44 @@ public enum BaseRunning {
 
         return (newBases, scored)
     }
+
+    /// A hit WITHOUT ghost runners: the batter takes their base (single=1st … triple=3rd; a home
+    /// run scores the batter and everyone on base). Existing runners move ONLY when forced — i.e.
+    /// the batter (or a bumped runner) needs their base — so discretionary advancement is left to
+    /// the scorer. A runner forced past 3rd scores.
+    public static func advanceForcedHit(
+        bases: [Int?],
+        batter: Int,
+        baseCount: Int
+    ) -> (bases: [Int?], scored: [Int]) {
+        // Home run: clear the bases — batter + everyone on base score.
+        if baseCount >= 4 {
+            var scored = bases.compactMap { $0 }
+            scored.append(batter)
+            return ([nil, nil, nil], scored)
+        }
+
+        var newBases = bases
+        var scored: [Int] = []
+        let target = baseCount - 1   // 0-indexed base the batter is headed to
+
+        // Push the runner at `index` up one base to make room, cascading first so we never
+        // overwrite an occupied base. Past 3rd (index 2) ⇒ that runner scores.
+        func bump(_ index: Int) {
+            guard let token = newBases[index] else { return }
+            let next = index + 1
+            if next > 2 {
+                scored.append(token)
+                newBases[index] = nil
+                return
+            }
+            bump(next)
+            newBases[next] = token
+            newBases[index] = nil
+        }
+
+        bump(target)
+        newBases[target] = batter
+        return (newBases, scored)
+    }
 }

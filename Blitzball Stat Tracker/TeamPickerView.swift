@@ -42,17 +42,21 @@ struct TeamPickerView: View {
                         } label: {
                             HStack {
                                 Text(team.name)
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(.white)
                                 Spacer()
                                 Text("\(team.players.count) players")
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.white.opacity(0.6))
                             }
                         }
+                        .buttonStyle(.plain)
+                        .blitzCardRow()
                     }
+                    .blitzListStyle()
                 }
             }
             .navigationTitle("Select Team")
+            .blitzballBackground()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

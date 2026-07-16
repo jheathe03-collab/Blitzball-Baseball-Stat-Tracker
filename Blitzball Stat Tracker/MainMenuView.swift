@@ -2,121 +2,96 @@
 //  MainMenuView.swift
 //  Blitzball Stat Tracker
 //
-//  The hub shown after the splash. Owns the navigation stack; each row pushes a feature.
+//  The hub shown after the splash. Owns the navigation stack; each card pushes a feature.
+//  Custom branded header + dark menu cards on the blue gradient (with a faint logo watermark).
 //
 
 import SwiftUI
 import SwiftData
 
 struct MainMenuView: View {
-    // Owns the navigation path so deep screens can pop back to the menu (shared via environment).
-    @State private var router = Router()
+    // Provided by RootView (which owns it) so it can also drive the splash replay.
+    let router: Router
 
     var body: some View {
         // A local bindable handle so we can bind the stack to the router's season path.
         @Bindable var router = router
 
-        // This NavigationStack is the ONE stack for the whole menu area. Every feature we
-        // push (Players, Teams, ...) rides on top of it — which is why those screens don't
-        // declare their own stacks. The Season area is value-based (via `path`) so it can pop
-        // several levels at once; the other features stay simple view-based links.
+        // This NavigationStack is the ONE stack for the whole menu area. The Season area is
+        // value-based (via `path`) so it can pop several levels at once; other features are links.
         NavigationStack(path: $router.seasonPath) {
-            List {
-                // A little branding at the top. `.listRowBackground(.clear)` hides the usual
-                // row background so the logo floats.
-                Section {
-                    HStack {
-                        Spacer()
-                        Image("BlitzballLogoHQ")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(height: 64)
-                        Spacer()
-                    }
-                    .listRowBackground(Color.clear)
-                }
+            GeometryReader { geo in
+                ScrollView {
+                    VStack(spacing: 16) {
+                        header
 
-                // The four features. Each NavigationLink pairs a destination screen with the
-                // row the user taps.
-                Section {
-                    NavigationLink(destination: ExhibitionView()) {
-                        MenuRow(title: "Exhibition",
-                                subtitle: "Track stats for a single game",
-                                systemImage: "baseball.fill",
-                                tint: .orange)
+                        // Full-width feature cards.
+                        NavigationLink(value: SeasonRoute.menu) {
+                            MenuCard(title: "Season",
+                                     subtitle: "Run a league season week by week",
+                                     systemImage: "calendar")
+                        }
+                        NavigationLink(destination: ExhibitionView()) {
+                            MenuCard(title: "Exhibition",
+                                     subtitle: "Track stats for a single game",
+                                     systemImage: "baseball.fill")
+                        }
+                        NavigationLink(destination: TournamentBracketView()) {
+                            MenuCard(title: "Tournament Bracket",
+                                     subtitle: "Run a tournament bracket",
+                                     systemImage: "trophy.fill")
+                        }
+
+                        // Players + Teams as a side-by-side pair.
+                        HStack(spacing: 16) {
+                            NavigationLink(destination: PlayersView()) {
+                                MenuCard(title: "Players", systemImage: "figure.baseball", compact: true)
+                            }
+                            NavigationLink(destination: TeamsView()) {
+                                MenuCard(title: "Teams", systemImage: "person.3.fill", compact: true)
+                            }
+                        }
                     }
-                    NavigationLink(destination: TournamentBracketView()) {
-                        MenuRow(title: "Tournament Bracket",
-                                subtitle: "Run a bracket across a season",
-                                systemImage: "trophy.fill",
-                                tint: .yellow)
-                    }
-                    NavigationLink(destination: PlayersView()) {
-                        MenuRow(title: "Players",
-                                subtitle: "Add players and track their stats",
-                                systemImage: "person.fill",
-                                tint: .blue)
-                    }
-                    NavigationLink(destination: TeamsView()) {
-                        MenuRow(title: "Teams",
-                                subtitle: "Build teams from your players",
-                                systemImage: "person.3.fill",
-                                tint: .green)
-                    }
-                    NavigationLink(value: SeasonRoute.menu) {
-                        MenuRow(title: "Season",
-                                subtitle: "Run a league season week by week",
-                                systemImage: "calendar",
-                                tint: .purple)
-                    }
+                    .padding(.horizontal, 20)
+                    // Fill at least the screen height so the block centers vertically (still
+                    // scrolls if it ever overflows on a small device).
+                    .frame(minHeight: geo.size.height)
                 }
             }
-            .navigationTitle("Main Menu")
             // One handler renders every Season screen, at any depth in the season stack.
             .navigationDestination(for: SeasonRoute.self) { route in
                 switch route {
-                case .menu:             SeasonModeView()
-                case .newSeason:        NewSeasonView()
-                case .resume:           ResumeSeasonView()
+                case .menu:              SeasonModeView()
+                case .newSeason:         NewSeasonView()
+                case .resume:            ResumeSeasonView()
                 case .games(let season): SeasonGamesView(season: season)
                 }
             }
+            .toolbar(.hidden, for: .navigationBar)   // custom header instead of the system bar
+            .blitzballBackground(watermark: true)
         }
         // Changing this id rebuilds the stack → pops back to the menu when a deep screen calls
         // router.popToRoot(). Shared via environment so those screens can trigger it.
         .id(router.resetID)
         .environment(router)
     }
-}
 
-/// One menu row: a colored icon tile, a title, and a short description.
-private struct MenuRow: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    let tint: Color
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.title3)
+    private var header: some View {
+        VStack(spacing: 2) {
+            Text("Blitzball Stat Tracker")
+                .font(Theme.screenTitle)
                 .foregroundStyle(.white)
-                .frame(width: 38, height: 38)
-                .background(tint, in: RoundedRectangle(cornerRadius: 9))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.headline)
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+                .multilineTextAlignment(.center)
+            Text("Main Menu")
+                .font(Theme.screenSubtitle)
+                .foregroundStyle(.white.opacity(0.65))
         }
-        .padding(.vertical, 4)
+        .padding(.top, 20)
+        .padding(.bottom, 8)
     }
 }
 
 #Preview {
-    MainMenuView()
+    MainMenuView(router: Router())
         .modelContainer(for: Player.self, inMemory: true)
 }

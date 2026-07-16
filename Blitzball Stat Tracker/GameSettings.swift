@@ -30,6 +30,7 @@ enum GameType: String, Codable, CaseIterable {
 /// automatically with no extra bookkeeping.
 struct GameSettings: Codable, Hashable, Sendable {
     var innings: Int          // 1...9
+    var outsPerInning: Int    // how many outs end a half-inning (default 3)
     var extraInnings: Bool
     var substitutions: Bool
     var allTeamPitch: Bool
@@ -44,18 +45,19 @@ struct GameSettings: Codable, Hashable, Sendable {
 
     // Allowed ranges, kept next to the data so the UI steppers can reuse them.
     static let inningsRange = 1...9
+    static let outsRange = 1...10
     static let strikesRange = 1...10
     static let ballsRange = 1...10
     static let challengesRange = 0...3
 
     // The two presets (from James's mockup).
     static let blitzballDefaults = GameSettings(
-        innings: 7, extraInnings: true, substitutions: true, allTeamPitch: true,
+        innings: 7, outsPerInning: 3, extraInnings: true, substitutions: true, allTeamPitch: true,
         maxStrikes: 3, maxBalls: 6, ghostRunners: true, hbpWalks: false, challenges: 0,
         designatedHitter: false
     )
     static let baseballDefaults = GameSettings(
-        innings: 9, extraInnings: true, substitutions: true, allTeamPitch: true,
+        innings: 9, outsPerInning: 3, extraInnings: true, substitutions: true, allTeamPitch: true,
         maxStrikes: 3, maxBalls: 4, ghostRunners: false, hbpWalks: true, challenges: 2,
         designatedHitter: false
     )
@@ -69,5 +71,31 @@ struct GameSettings: Codable, Hashable, Sendable {
         case Self.baseballDefaults:  return .baseball
         default:                     return .custom
         }
+    }
+}
+
+// MARK: - Backward-compatible decoding
+
+extension GameSettings {
+    private enum CodingKeys: String, CodingKey {
+        case innings, outsPerInning, extraInnings, substitutions, allTeamPitch
+        case maxStrikes, maxBalls, ghostRunners, hbpWalks, challenges, designatedHitter
+    }
+
+    // Games saved BEFORE `outsPerInning` existed still load (defaulting to 3) instead of failing
+    // to decode and wiping the user's data. Encoding stays auto-synthesized via these keys.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        innings = try c.decode(Int.self, forKey: .innings)
+        outsPerInning = try c.decodeIfPresent(Int.self, forKey: .outsPerInning) ?? 3
+        extraInnings = try c.decode(Bool.self, forKey: .extraInnings)
+        substitutions = try c.decode(Bool.self, forKey: .substitutions)
+        allTeamPitch = try c.decode(Bool.self, forKey: .allTeamPitch)
+        maxStrikes = try c.decode(Int.self, forKey: .maxStrikes)
+        maxBalls = try c.decode(Int.self, forKey: .maxBalls)
+        ghostRunners = try c.decode(Bool.self, forKey: .ghostRunners)
+        hbpWalks = try c.decode(Bool.self, forKey: .hbpWalks)
+        challenges = try c.decode(Int.self, forKey: .challenges)
+        designatedHitter = try c.decode(Bool.self, forKey: .designatedHitter)
     }
 }

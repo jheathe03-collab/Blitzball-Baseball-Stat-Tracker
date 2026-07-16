@@ -130,6 +130,36 @@ enum PlayerImportError: LocalizedError {
     }
 }
 
+/// Identifies an archived stat line for dedup during merge. Two lines with the same signature
+/// are treated as the same historical game — matches how a re-export of the same source game
+/// serializes (same date/season/week/opponent/side).
+private struct ArchivedLineKey: Hashable {
+    let date: Date
+    let opponent: String?
+    let seasonName: String?
+    let week: Int?
+    let isHome: Bool
+    let isDH: Bool
+
+    init(line: GameStatLine) {
+        self.date = line.archivedAt ?? .distantPast
+        self.opponent = line.archivedOpponent
+        self.seasonName = line.archivedSeasonName
+        self.week = line.archivedWeek
+        self.isHome = line.isHome
+        self.isDH = line.isDH
+    }
+
+    init(dto: PlayerArchive.ArchivedStatLineDTO) {
+        self.date = dto.date
+        self.opponent = dto.opponent
+        self.seasonName = dto.seasonName
+        self.week = dto.week
+        self.isHome = dto.isHome
+        self.isDH = dto.isDH
+    }
+}
+
 extension PlayerArchive {
     /// Decode + validate an archive from raw file data.
     static func decoded(from data: Data) throws -> PlayerArchive {
@@ -141,8 +171,14 @@ extension PlayerArchive {
 
     /// Apply this archive to the store per the chosen resolution.
     /// - Parameter existing: a stored player with the same name (nil ⇒ createNew).
-    func apply(resolution: ImportResolution, existing: Player?, context: ModelContext) {
+    /// - Returns: the number of stat lines actually inserted (merge skips duplicates).
+    @discardableResult
+    func apply(resolution: ImportResolution, existing: Player?, context: ModelContext) -> Int {
         let target: Player
+        // Signatures of archived lines already on the target — used to skip duplicates on merge,
+        // so re-importing the same file (or a superset) doesn't double-count history.
+        var existingKeys: Set<ArchivedLineKey> = []
+
         switch resolution {
         case .createNew:
             let player = Player(name: player.name, jerseyNumber: player.jerseyNumber)
@@ -150,23 +186,31 @@ extension PlayerArchive {
             target = player
 
         case .merge:
-            guard let existing else { return }
+            guard let existing else { return 0 }
             if existing.jerseyNumber == nil { existing.jerseyNumber = player.jerseyNumber }
+            existingKeys = Set(existing.gameStatLines
+                .filter { $0.isArchived && $0.game == nil }
+                .map(ArchivedLineKey.init(line:)))
             target = existing
 
         case .replace:
-            guard let existing else { return }
+            guard let existing else { return 0 }
             // Remove ONLY previously-imported archived lines — never lines tied to a real game.
-            for line in existing.gameStatLines where line.isArchived && line.game == nil {
-                context.delete(line)
-            }
+            // Snapshot first so we're not mutating the relationship we're iterating.
+            let toDelete = existing.gameStatLines.filter { $0.isArchived && $0.game == nil }
+            for line in toDelete { context.delete(line) }
             if existing.jerseyNumber == nil { existing.jerseyNumber = player.jerseyNumber }
             target = existing
         }
 
+        var added = 0
         for dto in statLines {
+            let key = ArchivedLineKey(dto: dto)
+            guard existingKeys.insert(key).inserted else { continue }
             makeLine(from: dto, for: target, in: context)
+            added += 1
         }
+        return added
     }
 
     /// Turn one DTO into a standalone archived GameStatLine (game == nil) attached to `player`.

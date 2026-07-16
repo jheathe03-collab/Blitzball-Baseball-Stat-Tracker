@@ -15,6 +15,7 @@ struct GameOptionsView: View {
         GameSettingsEditor(settings: $game.settings)
             .navigationTitle("Game Options")
             .navigationBarTitleDisplayMode(.inline)
+            .blitzballBackground()
     }
 }
 

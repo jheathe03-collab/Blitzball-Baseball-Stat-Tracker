@@ -15,5 +15,6 @@ struct SeasonSettingsView: View {
         GameSettingsEditor(settings: $season.settings)
             .navigationTitle("Season Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .blitzballBackground()
     }
 }

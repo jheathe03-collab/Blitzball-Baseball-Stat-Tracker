@@ -26,12 +26,17 @@ struct EditPlayerView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Name", text: $name)
-                TextField("Jersey number (optional)", text: $jerseyText)
+                TextField("", text: $name,
+                          prompt: Text("Name").foregroundStyle(.white.opacity(0.5)))
+                    .blitzCardRow()
+                TextField("", text: $jerseyText,
+                          prompt: Text("Jersey number (optional)").foregroundStyle(.white.opacity(0.5)))
                     .keyboardType(.numberPad)
+                    .blitzCardRow()
             }
             .navigationTitle("Edit Player")
             .navigationBarTitleDisplayMode(.inline)
+            .blitzballBackground()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

@@ -39,8 +39,9 @@ struct TeamDetailView: View {
                 Label("League (coming soon)", systemImage: "flag.2.crossed")
                     .foregroundStyle(.secondary)
             }
+            .blitzCardRow()
 
-            Section("Members") {
+            Section(header: Text("Members").foregroundStyle(.white)) {
                 if team.players.isEmpty {
                     Text("No players yet — add some above.")
                         .foregroundStyle(.secondary)
@@ -64,8 +65,11 @@ struct TeamDetailView: View {
                     }
                 }
             }
+            .blitzCardRow()
         }
+        .blitzListStyle()
         .navigationTitle(team.name)
+        .blitzballBackground()
         // Two sheets: pick existing players, or create a brand-new one that joins this team.
         .sheet(isPresented: $showingAddExisting) {
             AddExistingPlayerView(team: team)

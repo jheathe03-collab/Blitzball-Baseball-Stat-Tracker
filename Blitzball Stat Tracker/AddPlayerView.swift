@@ -27,13 +27,18 @@ struct AddPlayerView: View {
             Form {
                 // `$name` is a two-way binding: the field displays `name` AND writes back
                 // into it as the user types.
-                TextField("Name", text: $name)
+                TextField("", text: $name,
+                          prompt: Text("Name").foregroundStyle(.white.opacity(0.5)))
+                    .blitzCardRow()
 
-                TextField("Jersey number (optional)", text: $jerseyText)
+                TextField("", text: $jerseyText,
+                          prompt: Text("Jersey number (optional)").foregroundStyle(.white.opacity(0.5)))
                     .keyboardType(.numberPad) // show the number keypad
+                    .blitzCardRow()
             }
             .navigationTitle("New Player")
             .navigationBarTitleDisplayMode(.inline)
+            .blitzballBackground()
             .toolbar {
                 // Cancel just closes the sheet without saving.
                 ToolbarItem(placement: .cancellationAction) {

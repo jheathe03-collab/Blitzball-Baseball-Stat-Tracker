@@ -17,10 +17,13 @@ struct AddTeamView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Team name", text: $name)
+                TextField("", text: $name,
+                          prompt: Text("Team name").foregroundStyle(.white.opacity(0.5)))
+                    .blitzCardRow()
             }
             .navigationTitle("New Team")
             .navigationBarTitleDisplayMode(.inline)
+            .blitzballBackground()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

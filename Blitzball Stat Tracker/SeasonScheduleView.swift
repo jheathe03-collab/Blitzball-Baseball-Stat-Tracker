@@ -36,6 +36,7 @@ struct SeasonScheduleView: View {
         }
         .navigationTitle("Season Schedule")
         .navigationBarTitleDisplayMode(.inline)
+        .blitzballBackground()
         .onAppear { season.syncSchedule(using: modelContext) }
     }
 
@@ -63,6 +64,7 @@ struct WeekMatchupView: View {
             teamSection(role: .away, team: game.awayTeam)
         }
         .navigationTitle("Week \(game.weekNumber)")
+        .blitzballBackground()
         .navigationBarTitleDisplayMode(.inline)
         // Reuses TeamRole (home/away) + TeamPickerView from the exhibition flow.
         .sheet(item: $picking) { role in

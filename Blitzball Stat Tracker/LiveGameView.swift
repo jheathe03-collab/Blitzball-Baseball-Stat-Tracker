@@ -62,6 +62,7 @@ struct LiveGameView: View {
         }
         .navigationTitle("Live Game")
         .navigationBarTitleDisplayMode(.inline)
+        .blitzDarkBackground()   // solid dark (no gradient) for readability during the game
         .navigationBarBackButtonHidden(true)   // no exit mid-game except End Game
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {

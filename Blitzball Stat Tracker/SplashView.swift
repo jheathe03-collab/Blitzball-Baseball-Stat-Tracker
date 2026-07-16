@@ -17,20 +17,13 @@ struct SplashView: View {
         ZStack {
             // The brand gradient background, top-to-bottom. `.ignoresSafeArea()` lets it run
             // edge to edge, under the notch and home indicator.
-            LinearGradient(
-                colors: [
-                    Color(red: 1.00, green: 0.84, blue: 0.30), // golden yellow (top)
-                    Color(red: 0.97, green: 0.55, blue: 0.11)  // orange (bottom)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            Theme.brandGradient
+                .ignoresSafeArea()
 
             VStack(spacing: 24) {
                 // The logo. `.resizable()` + `.scaledToFit()` let it shrink to our frame while
                 // keeping its proportions.
-                Image("BlitzballLogoHQ")
+                Image("BlitzBalllogo")
                     .resizable()
                     .scaledToFit()
                     .frame(maxWidth: 280)
@@ -39,12 +32,12 @@ struct SplashView: View {
                     .scaleEffect(animateIn ? 1.0 : 0.6)
                     .opacity(animateIn ? 1.0 : 0.0)
 
-                Text("BlitzBall Stat Tracker")
+                Text("Stat Tracker")
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
                     .opacity(animateIn ? 1.0 : 0.0)
             }
-            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+            .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
         }
         // `.onAppear` runs the moment the view shows up. Wrapping the state change in
         // `withAnimation` tells SwiftUI: don't snap to the new values — glide there.

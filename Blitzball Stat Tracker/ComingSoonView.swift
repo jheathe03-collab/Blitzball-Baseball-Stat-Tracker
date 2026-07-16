@@ -20,6 +20,8 @@ struct ComingSoonView: View {
         )
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .foregroundStyle(.white)
+        .blitzballBackground()
     }
 }
 
