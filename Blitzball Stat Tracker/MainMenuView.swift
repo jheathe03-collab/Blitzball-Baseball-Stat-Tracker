@@ -25,6 +25,8 @@ struct MainMenuView: View {
                     VStack(spacing: 16) {
                         header
 
+                        LeaderboardCard()
+
                         // Full-width feature cards.
                         NavigationLink(value: SeasonRoute.menu) {
                             MenuCard(title: "Season",
@@ -88,6 +90,103 @@ struct MainMenuView: View {
         }
         .padding(.top, 20)
         .padding(.bottom, 8)
+    }
+}
+
+// MARK: - Leaderboard
+
+/// All-time, league-wide leaders shown on the Main Menu: best team (by record), best batter (OPS),
+/// best pitcher (ERA). No minimum PA/IP — but a player must have actually batted/pitched to appear.
+private struct LeaderboardCard: View {
+    @Query private var teams: [Team]
+    @Query private var players: [Player]
+    @Query private var games: [Game]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Leaderboard")
+                .font(Theme.cardTitle)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            if topTeam == nil && topBatter == nil && topPitcher == nil {
+                Text("Play some games and your league leaders show up here.")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
+            } else {
+                entry(icon: "trophy.fill", label: "Top Team", value: topTeamText)
+                entry(icon: "figure.baseball", label: "Top Batter", value: topBatterText)
+                entry(icon: "baseball.fill", label: "Top Pitcher", value: topPitcherText)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+    }
+
+    private func entry(icon: String, label: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 22)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.6))
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+            }
+            Spacer()
+        }
+    }
+
+    // MARK: Leaders
+
+    private var topTeam: (team: Team, record: (wins: Int, losses: Int))? {
+        teams
+            .map { (team: $0, record: $0.record(from: games)) }
+            .filter { $0.record.wins + $0.record.losses > 0 }   // must have a decided game
+            .sorted { $0.record.wins != $1.record.wins
+                        ? $0.record.wins > $1.record.wins
+                        : $0.record.losses < $1.record.losses }
+            .first
+    }
+
+    private var topBatter: (player: Player, stats: BattingStats)? {
+        players
+            .map { (player: $0, stats: $0.careerBatting) }
+            .filter { $0.stats.atBats > 0 }
+            .sorted { $0.stats.onBasePlusSlugging > $1.stats.onBasePlusSlugging }
+            .first
+    }
+
+    private var topPitcher: (player: Player, stats: PitchingStats)? {
+        players
+            .map { (player: $0, stats: $0.careerPitching) }
+            .filter { $0.stats.outsRecorded > 0 }
+            .sorted { $0.stats.earnedRunAverage < $1.stats.earnedRunAverage }
+            .first
+    }
+
+    private var topTeamText: String {
+        guard let t = topTeam else { return "—" }
+        let w = t.record.wins, l = t.record.losses
+        return "\(t.team.name) · \(w) Win\(w == 1 ? "" : "s")  \(l) Loss\(l == 1 ? "" : "es")"
+    }
+
+    private var topBatterText: String {
+        guard let b = topBatter else { return "—" }
+        return "\(b.player.name) · \(StatFormat.rate(b.stats.battingAverage)) AVG  \(StatFormat.rate(b.stats.onBasePlusSlugging)) OPS"
+    }
+
+    private var topPitcherText: String {
+        guard let p = topPitcher else { return "—" }
+        return "\(p.player.name) · \(StatFormat.ratio(p.stats.earnedRunAverage)) ERA"
     }
 }
 

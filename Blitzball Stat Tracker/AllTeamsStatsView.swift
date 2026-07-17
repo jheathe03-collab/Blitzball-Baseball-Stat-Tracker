@@ -13,6 +13,9 @@ struct AllTeamsStatsView: View {
     @Query(sort: \Team.name) private var teams: [Team]
     @Query private var games: [Game]   // for deriving W-L
 
+    @State private var exportFile: CSVExportFile?
+    @State private var exportError: String?
+
     // The stat columns, left to right (after the team-name column).
     private let headers = ["AVG", "W-L", "HR", "RBI", "Hits", "ERA", "Saves", "K", "QS"]
 
@@ -64,6 +67,35 @@ struct AllTeamsStatsView: View {
         .navigationTitle("All Teams Stats")
         .navigationBarTitleDisplayMode(.inline)
         .blitzballBackground()
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: exportCSV) {
+                    Label("Export Spreadsheet", systemImage: "square.and.arrow.up")
+                }
+                .disabled(teams.isEmpty)
+            }
+        }
+        .sheet(item: $exportFile) { file in
+            ShareSheet(items: [file.url])
+        }
+        .alert("Export Failed", isPresented: exportErrorBinding) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(exportError ?? "")
+        }
+    }
+
+    private var exportErrorBinding: Binding<Bool> {
+        Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
+    }
+
+    private func exportCSV() {
+        do {
+            let csv = StatsCSV.allTeamsCSV(teams: teams, games: games)
+            exportFile = CSVExportFile(url: try StatsCSV.writeTempFile(csv, baseName: "All-Teams"))
+        } catch {
+            exportError = error.localizedDescription
+        }
     }
 }
 

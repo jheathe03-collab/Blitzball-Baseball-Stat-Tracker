@@ -59,6 +59,9 @@ struct SeasonStatsView: View {
 struct SeasonStatsDetailView: View {
     let season: Season
 
+    @State private var exportFile: CSVExportFile?
+    @State private var exportError: String?
+
     var body: some View {
         List {
             standingsSection
@@ -69,6 +72,35 @@ struct SeasonStatsDetailView: View {
         .blitzballBackground()
         .blitzListStyle()
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: exportCSV) {
+                    Label("Export Spreadsheet", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+        .sheet(item: $exportFile) { file in
+            ShareSheet(items: [file.url])
+        }
+        .alert("Export Failed", isPresented: exportErrorBinding) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(exportError ?? "")
+        }
+    }
+
+    private var exportErrorBinding: Binding<Bool> {
+        Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
+    }
+
+    private func exportCSV() {
+        do {
+            let csv = StatsCSV.seasonCSV(season)
+            let base = season.name.isEmpty ? "Season" : season.name
+            exportFile = CSVExportFile(url: try StatsCSV.writeTempFile(csv, baseName: base))
+        } catch {
+            exportError = error.localizedDescription
+        }
     }
 
     // MARK: Standings
