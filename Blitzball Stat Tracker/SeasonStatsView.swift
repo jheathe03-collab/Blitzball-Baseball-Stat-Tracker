@@ -82,6 +82,7 @@ struct SeasonStatsDetailView: View {
             } else {
                 ForEach(standings, id: \.team.persistentModelID) { entry in
                     HStack {
+                        TeamLogoView(logoName: entry.team.logoName, size: 24)
                         Text(entry.team.name)
                         Spacer()
                         Text("\(entry.record.wins)-\(entry.record.losses)")

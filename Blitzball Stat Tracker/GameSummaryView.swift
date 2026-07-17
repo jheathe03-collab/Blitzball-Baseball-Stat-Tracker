@@ -30,6 +30,8 @@ struct GameSummaryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                finalScoreHeader
+
                 Picker("Team", selection: $showingHome) {
                     Text(game.homeTeam?.name ?? "Home").tag(true)
                     Text(game.awayTeam?.name ?? "Away").tag(false)
@@ -74,6 +76,26 @@ struct GameSummaryView: View {
         }
         .navigationTitle("Game Summary")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// A compact final line: each team's logo + name flanking the score.
+    private var finalScoreHeader: some View {
+        HStack(alignment: .center, spacing: 12) {
+            teamScore(team: game.homeTeam, score: game.homeScore, fallback: "Home")
+            Text("–").font(.title2).foregroundStyle(.secondary)
+            teamScore(team: game.awayTeam, score: game.awayScore, fallback: "Away")
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func teamScore(team: Team?, score: Int, fallback: String) -> some View {
+        VStack(spacing: 6) {
+            TeamLogoView(logoName: team?.logoName, size: 48)
+            Text(team?.name ?? fallback)
+                .font(.caption).lineLimit(1).minimumScaleFactor(0.7)
+            Text("\(score)").font(.title.bold()).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
