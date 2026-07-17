@@ -26,6 +26,12 @@ struct PlayersView: View {
     @State private var showingImporter = false
     @State private var pendingImport: PendingImport?
     @State private var importMessage: String?
+    // Bulk import: remaining decoded files to process, running tallies, and unreadable files.
+    @State private var importQueue: [PlayerArchive] = []
+    @State private var importErrors: [String] = []
+    @State private var importedPlayers = 0
+    @State private var importedAdded = 0
+    @State private var importedSkipped = 0
     // Multi-player export selection sheet.
     @State private var showingExport = false
 
@@ -85,7 +91,7 @@ struct PlayersView: View {
                     Button {
                         showingImporter = true
                     } label: {
-                        Label("Import Player…", systemImage: "square.and.arrow.down")
+                        Label("Import Players…", systemImage: "square.and.arrow.down")
                     }
                     Button {
                         showingExport = true
@@ -121,14 +127,16 @@ struct PlayersView: View {
         } message: { player in
             Text(inUseMessage(for: player))
         }
-        .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.json]) { result in
+        .fileImporter(isPresented: $showingImporter,
+                      allowedContentTypes: [.json],
+                      allowsMultipleSelection: true) { result in
             handleImport(result)
         }
         .confirmationDialog(duplicateTitle, isPresented: pendingImportBinding, presenting: pendingImport) { pending in
             Button("Merge") { resolve(pending, .merge) }
             Button("Replace", role: .destructive) { resolve(pending, .replace) }
             Button("Create New") { resolve(pending, .createNew) }
-            Button("Cancel", role: .cancel) { }
+            Button("Skip", role: .cancel) { skipCurrentImport() }
         } message: { pending in
             Text(duplicateMessage(for: pending))
         }
@@ -188,49 +196,89 @@ struct PlayersView: View {
     private func duplicateMessage(for pending: PendingImport) -> String {
         let games = pending.existing.finalStatLines.count
         let jersey = pending.existing.jerseyNumber.map { "#\($0)" } ?? "no number"
-        return "You already have \(pending.existing.name) (\(jersey), \(games) game\(games == 1 ? "" : "s")). "
+        var text = "You already have \(pending.existing.name) (\(jersey), \(games) game\(games == 1 ? "" : "s")). "
             + "Merge adds the imported games, Replace swaps only previously-imported stats, Create New keeps them separate."
+        if !importQueue.isEmpty {
+            text += "\n\n(\(importQueue.count) more file\(importQueue.count == 1 ? "" : "s") to review after this.)"
+        }
+        return text
     }
 
-    /// Read + decode the picked file, then either import directly or ask how to resolve a name clash.
-    private func handleImport(_ result: Result<URL, Error>) {
+    /// Decode every picked file, then work through them one at a time (pausing on each name clash).
+    private func handleImport(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
             importMessage = error.localizedDescription
-        case .success(let url):
-            do {
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                let data = try Data(contentsOf: url)
-                let archive = try PlayerArchive.decoded(from: data)
-                if let existing = players.first(where: { $0.name == archive.player.name }) {
-                    pendingImport = PendingImport(archive: archive, existing: existing)
-                } else {
-                    let added = archive.apply(resolution: .createNew, existing: nil, context: modelContext)
-                    importMessage = importedSummary(archive, added: added)
+        case .success(let urls):
+            // Reset tallies for this batch.
+            importErrors = []; importedPlayers = 0; importedAdded = 0; importedSkipped = 0
+            var archives: [PlayerArchive] = []
+            for url in urls {
+                do {
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    let data = try Data(contentsOf: url)
+                    archives.append(try PlayerArchive.decoded(from: data))
+                } catch {
+                    importErrors.append("\u{201C}\(url.lastPathComponent)\u{201D}: \(error.localizedDescription)")
                 }
-            } catch {
-                importMessage = error.localizedDescription
             }
+            importQueue = archives
+            processNextImport()
         }
+    }
+
+    /// Import queued files until one needs a name-clash decision (then pause for the dialog) or
+    /// the queue empties (then show the batch summary).
+    private func processNextImport() {
+        while !importQueue.isEmpty {
+            let archive = importQueue.removeFirst()
+            if let existing = players.first(where: { $0.name == archive.player.name }) {
+                pendingImport = PendingImport(archive: archive, existing: existing)
+                return   // wait for the user's Merge/Replace/Create New/Skip choice
+            }
+            let added = archive.apply(resolution: .createNew, existing: nil, context: modelContext)
+            tally(archive, added: added)
+        }
+        finishImport()
     }
 
     private func resolve(_ pending: PendingImport, _ resolution: ImportResolution) {
         let added = pending.archive.apply(resolution: resolution, existing: pending.existing, context: modelContext)
+        tally(pending.archive, added: added)
         pendingImport = nil
-        importMessage = importedSummary(pending.archive, added: added)
+        processNextImport()   // continue with the rest of the batch
     }
 
-    /// The archive can contain more lines than we actually inserted (merge skips duplicates), so
-    /// mention both so the user knows nothing silently doubled.
-    private func importedSummary(_ archive: PlayerArchive, added: Int) -> String {
-        let total = archive.statLines.count
-        let skipped = total - added
-        let addedText = "\(added) game\(added == 1 ? "" : "s")"
-        if skipped > 0 {
-            return "Imported \(archive.player.name) — added \(addedText) (skipped \(skipped) already on file)."
+    /// User chose Skip for this file — drop it and keep going.
+    private func skipCurrentImport() {
+        pendingImport = nil
+        processNextImport()
+    }
+
+    private func tally(_ archive: PlayerArchive, added: Int) {
+        importedPlayers += 1
+        importedAdded += added
+        importedSkipped += (archive.statLines.count - added)   // merge skips duplicates
+    }
+
+    /// Combine the batch's results (and any unreadable files) into one summary alert.
+    private func finishImport() {
+        var parts: [String] = []
+        if importedPlayers > 0 {
+            var line = "Imported \(importedPlayers) player\(importedPlayers == 1 ? "" : "s") — added "
+                + "\(importedAdded) game\(importedAdded == 1 ? "" : "s")."
+            if importedSkipped > 0 {
+                line += " Skipped \(importedSkipped) already on file."
+            }
+            parts.append(line)
         }
-        return "Imported \(archive.player.name) — \(addedText) of stats."
+        if !importErrors.isEmpty {
+            parts.append("Couldn't read \(importErrors.count) file\(importErrors.count == 1 ? "" : "s"):\n"
+                + importErrors.joined(separator: "\n"))
+        }
+        // Nothing imported and nothing failed (e.g. a single file skipped) → no alert.
+        importMessage = parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
 }
 

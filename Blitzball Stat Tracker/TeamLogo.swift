@@ -9,13 +9,29 @@
 import SwiftUI
 
 enum TeamLogo {
-    /// Asset names of the bundled logos, in menu order.
+    /// Asset names of the bundled logos, in menu order. These MUST match the imageset names in
+    /// Assets.xcassets — they're what `Image(_:)` loads and what `Team.logoName` stores.
     static let all = ["Banana", "BlitzDragons", "Bobcats", "Dragons",
                       "Elephants", "MightyFish", "Peppers", "Sharks"]
 
-    /// A friendlier label, e.g. "MightyFish" → "Mighty Fish".
+    /// The friendly, on-screen team name for each asset. Kept separate from the asset name so we
+    /// can show fun labels without breaking image lookups (which key off the asset name).
+    private static let displayNames: [String: String] = [
+        "Banana":       "Banana Splits",
+        "BlitzDragons": "Blitz Lizards",
+        "Bobcats":      "Blitzed Bobcats",
+        "Dragons":      "Knuckle Dragons",
+        "Elephants":    "Homerun Elephants",
+        "MightyFish":   "BlitzFish",
+        "Peppers":      "Spicy Peppers",
+        "Sharks":       "Whiffle Sharks",
+    ]
+
+    /// The label to show for a logo. Falls back to splitting camelCase (e.g. "MightyFish" →
+    /// "Mighty Fish") for any asset not in the map.
     static func displayName(_ name: String) -> String {
-        name.replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression)
+        if let friendly = displayNames[name] { return friendly }
+        return name.replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression)
     }
 
     /// Per-logo visual scale. Wide/short artwork fits its width in a square frame and ends up

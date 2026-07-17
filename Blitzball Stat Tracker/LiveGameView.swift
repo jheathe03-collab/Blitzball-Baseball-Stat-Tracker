@@ -31,6 +31,13 @@ struct LiveGameView: View {
     @State private var runToScore: RunToScore?
     @State private var showRunnerChooser = false
     @State private var showGameOver = false
+    // Set when the user picks "Edit Line Score" on the Game Over popup: suppresses the auto-popup
+    // while they fix a scoring mistake. Re-arms automatically if an edit makes the game un-final.
+    @State private var reviewingLineScore = false
+    // Ghost-OFF hit resolution: the in-progress station-to-station plan, and the "did they score?"
+    // prompt currently on screen (nil when none).
+    @State private var resolution: HitResolution?
+    @State private var currentScoringPrompt: ScoringPrompt?
 
     var body: some View {
         // Once the game is over, this same screen becomes the box score.
@@ -115,6 +122,7 @@ struct LiveGameView: View {
         .sheet(item: $editingBase) { selection in
             BaseEditorSheet(
                 baseName: baseName(selection.index),
+                currentRunner: game.runner(onBase: selection.index),
                 lineup: game.battingLineup
             ) { player in
                 perform { game.setRunner(player, onBase: selection.index) }
@@ -147,9 +155,16 @@ struct LiveGameView: View {
             }
         }
         .alert("Game Over", isPresented: $showGameOver) {
-            Button("OK") { game.status = .final }
+            Button("End Game") { game.status = .final }
+            Button("Edit Line Score") { reviewingLineScore = true }
         } message: {
-            Text(gameOverMessage)
+            Text(gameOverMessage + "\n\nEnd the game, or edit the line score if you need to make corrections.")
+        }
+        .alert("Runner Scored?", isPresented: scoringPromptBinding, presenting: currentScoringPrompt) { _ in
+            Button("Yes, Scored") { answerHitPrompt(scored: true) }
+            Button("No", role: .cancel) { answerHitPrompt(scored: false) }
+        } message: { prompt in
+            Text(prompt.message)
         }
     }
 
@@ -192,17 +207,141 @@ struct LiveGameView: View {
         return "\(winner) win! Final: \(away) \(awayScore), \(home) \(homeScore)."
     }
 
+    // MARK: - Recording an outcome (ghost-OFF hits → station-to-station + "did they score?")
+
+    /// Entry point for every outcome button. Ghost-runners-OFF hits (1B/2B/3B) run the interactive
+    /// station-to-station resolver; everything else (ghost-ON, HR, walks, outs) records directly.
+    private func recordOutcome(_ outcome: PlateAppearanceOutcome) {
+        guard !game.settings.ghostRunners,
+              let baseCount = hitBaseCount(outcome),
+              let batter = game.currentBatterLine?.player
+        else {
+            perform { game.record(outcome) }
+            return
+        }
+        // One undo snapshot covers the whole play (record + every runner placement/score).
+        pushUndo()
+        game.record(outcome, resolveBasesExternally: true)  // stats/outs/order only — no base moves
+        startHitResolution(batter: batter, baseCount: baseCount, hitNoun: hitNoun(outcome))
+    }
+
+    /// 1/2/3 for a single/double/triple; nil for anything else (HR auto-scores, so it's excluded).
+    private func hitBaseCount(_ outcome: PlateAppearanceOutcome) -> Int? {
+        switch outcome {
+        case .single: return 1
+        case .double: return 2
+        case .triple: return 3
+        default:      return nil
+        }
+    }
+
+    private func hitNoun(_ outcome: PlateAppearanceOutcome) -> String {
+        switch outcome {
+        case .single: return "single"
+        case .double: return "double"
+        case .triple: return "triple"
+        default:      return "hit"
+        }
+    }
+
+    /// Begin resolving a ghost-OFF hit: capture the runners (lead-first), clear the diamond, and
+    /// start walking them home — advancing each by the hit's base count and asking about scorers.
+    private func startHitResolution(batter: Player, baseCount: Int, hitNoun: String) {
+        var runners: [(base: Int, player: Player)] = []
+        var occupied: Set<Int> = []
+        for i in [2, 1, 0] {   // 3rd, 2nd, 1st — lead runner first
+            if let player = game.runner(onBase: i) { runners.append((i, player)); occupied.insert(i) }
+        }
+        for i in 0..<3 { game.setRunner(nil, onBase: i) }   // re-placed as each is resolved
+        resolution = HitResolution(batter: batter, baseCount: baseCount, hitNoun: hitNoun,
+                                   occupied: occupied, runners: runners)
+        resolveHitStep()
+    }
+
+    /// Advance runners until we hit one who reaches home with a clear path (→ prompt) or we run out
+    /// (→ place the batter and finish). `ahead` tracks the base held by the runner in front, so a
+    /// runner who holds blocks those behind him from stacking or passing.
+    private func resolveHitStep() {
+        guard var res = resolution else { return }
+        while res.index < res.runners.count {
+            let (startBase, player) = res.runners[res.index]
+            let desired = min(startBase + res.baseCount, 3)   // 3 == home
+            if desired >= 3 && res.ahead >= 3 {
+                // A true walk-in — a single with every base behind loaded — is forced home with no
+                // choice, so score it silently. Doubles/triples (and un-loaded singles) are the
+                // runner's decision, so we ask.
+                let forcedWalkIn = res.baseCount == 1 && (0..<startBase).allSatisfy { res.occupied.contains($0) }
+                if forcedWalkIn {
+                    game.scorePendingRunner(player, rbiTo: game.previousBatterLine)
+                    res.ahead = 3
+                    res.index += 1
+                    continue
+                }
+                // Clear path home, runner's choice → ask (paused until the alert is answered).
+                resolution = res
+                let name = player.name, noun = res.hitNoun
+                DispatchQueue.main.async {   // let any prior alert fully dismiss before re-presenting
+                    currentScoringPrompt = ScoringPrompt(player: player,
+                                                         message: "Did \(name) score on the \(noun)?")
+                }
+                return
+            }
+            // A mover (or a would-be scorer blocked by someone holding ahead): advance as far as the
+            // runner in front allows.
+            let target = min(desired, res.ahead - 1)
+            if target >= 0 { game.setRunner(player, onBase: target); res.ahead = target }
+            res.index += 1
+        }
+        // Everyone placed → the batter takes his base behind them.
+        let batterTarget = min(res.baseCount - 1, res.ahead - 1)
+        if batterTarget >= 0 { game.setRunner(res.batter, onBase: batterTarget) }
+        resolution = nil
+        finishPlay()
+    }
+
+    private func answerHitPrompt(scored: Bool) {
+        guard var res = resolution else { return }
+        let player = res.runners[res.index].player
+        if scored {
+            game.scorePendingRunner(player, rbiTo: game.previousBatterLine)  // RBI → the hitter
+            res.ahead = 3   // he's home; runners behind can still advance up to third
+        } else {
+            // He held short of home — third if open, otherwise one base back so nobody stacks.
+            let target = min(2, res.ahead - 1)
+            if target >= 0 { game.setRunner(player, onBase: target); res.ahead = target }
+        }
+        res.index += 1
+        resolution = res
+        currentScoringPrompt = nil
+        resolveHitStep()
+    }
+
+    private var scoringPromptBinding: Binding<Bool> {
+        Binding(get: { currentScoringPrompt != nil }, set: { if !$0 { currentScoringPrompt = nil } })
+    }
+
+    /// After a play fully resolves, surface the Game Over popup if the innings rule ended it.
+    private func finishPlay() {
+        guard game.status == .inProgress else { return }
+        if game.isComplete {
+            if !reviewingLineScore { showGameOver = true }
+        } else {
+            reviewingLineScore = false
+        }
+    }
+
     // MARK: - Undo plumbing
+
+    private func pushUndo() {
+        undoStack.append(game.snapshot())
+        if undoStack.count > 100 { undoStack.removeFirst(undoStack.count - 100) }
+    }
 
     /// Snapshot the game, then run the mutating action — so Undo can revert it.
     private func perform(_ action: () -> Void) {
-        undoStack.append(game.snapshot())
-        if undoStack.count > 100 { undoStack.removeFirst(undoStack.count - 100) }
+        pushUndo()
         action()
-        // Innings rule: if this play (or run) ended the game, surface the Game Over popup.
-        if game.status == .inProgress && game.isComplete {
-            showGameOver = true
-        }
+        finishPlay()
     }
 
     private func undo() {
@@ -261,7 +400,7 @@ struct LiveGameView: View {
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 8) {
                     ForEach(availableOutcomes, id: \.self) { outcome in
-                        Button(outcome.label) { perform { game.record(outcome) } }
+                        Button(outcome.label) { recordOutcome(outcome) }
                             .buttonStyle(.borderedProminent)
                             .tint(outcome.isHit ? .green : .blue)
                     }
@@ -384,6 +523,26 @@ private struct BaseSelection: Identifiable {
 private struct RunToScore: Identifiable {
     let id = UUID()
     let base: Int
+}
+
+// The "did this runner score?" prompt currently on screen (ghost-OFF station-to-station flow).
+private struct ScoringPrompt: Identifiable {
+    let id = UUID()
+    let player: Player
+    let message: String
+}
+
+/// In-progress state for resolving a ghost-OFF hit one runner at a time. Runners are ordered
+/// lead-first; `index` is how far we've resolved; `ahead` is the base index held by the runner in
+/// front (3 = home/clear), which caps how far the next runner may advance.
+private struct HitResolution {
+    let batter: Player
+    let baseCount: Int          // 1/2/3 for single/double/triple
+    let hitNoun: String
+    let occupied: Set<Int>      // pre-hit base indices, for the forced-walk-in test
+    var runners: [(base: Int, player: Player)]
+    var index: Int = 0
+    var ahead: Int = 3
 }
 
 // Pick who gets the RBI for a manually-scored run — or "No RBI" (wild pitch / error).
@@ -612,6 +771,7 @@ private struct LinePicker: View {
 /// Place or clear a ghost runner on a base.
 private struct BaseEditorSheet: View {
     let baseName: String
+    let currentRunner: Player?
     let lineup: [GameStatLine]
     let onSet: (Player?) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -619,19 +779,55 @@ private struct BaseEditorSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                // Who's here right now — the first thing you see. Occupied bases also get a
+                // "Clear Base" action; an empty base just says so.
                 Section {
-                    Button(role: .destructive) {
-                        onSet(nil); dismiss()
-                    } label: {
-                        Label("Clear Base", systemImage: "xmark.circle")
+                    HStack(spacing: 12) {
+                        Image(systemName: currentRunner == nil ? "circle.dashed" : "figure.stand")
+                            .font(.title2)
+                            .foregroundStyle(currentRunner == nil ? .white.opacity(0.4) : Color.accentColor)
+                            .frame(width: 30)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(currentRunner == nil ? "Base Empty" : "On \(baseName)")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.6))
+                            Text(currentRunner?.name ?? "No runner here")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                        }
+                        Spacer()
                     }
-                }
-                Section("Place Runner") {
-                    ForEach(lineup) { line in
-                        Button(line.player?.name ?? "—") {
-                            onSet(line.player); dismiss()
+                    if currentRunner != nil {
+                        Button(role: .destructive) {
+                            onSet(nil); dismiss()
+                        } label: {
+                            Label("Clear Base", systemImage: "xmark.circle")
                         }
                     }
+                } header: {
+                    Text("Currently on Base").foregroundStyle(.white)
+                }
+
+                Section {
+                    ForEach(lineup) { line in
+                        let isHere = line.player === currentRunner
+                        Button {
+                            onSet(line.player); dismiss()
+                        } label: {
+                            HStack {
+                                Text(line.player?.name ?? "—")
+                                Spacer()
+                                if isHere {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
+                        }
+                        .disabled(isHere)   // already on this base — nothing to change
+                    }
+                } header: {
+                    Text(currentRunner == nil ? "Place Runner" : "Replace Runner")
+                        .foregroundStyle(.white)
                 }
             }
             .navigationTitle(baseName)

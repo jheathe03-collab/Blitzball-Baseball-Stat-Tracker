@@ -127,6 +127,13 @@ extension Game {
         }
     }
 
+    /// Score a runner who advanced home on a ghost-OFF hit (he's already been lifted off the bases
+    /// by the resolver), optionally crediting the RBI to whoever just batted.
+    func scorePendingRunner(_ player: Player, rbiTo rbiLine: GameStatLine?) {
+        scoreRun(by: player)
+        if let rbiLine { rbiLine.batting.rbi += 1 }
+    }
+
     /// Manually place (or clear, with nil) a runner — the diamond editor's failsafe.
     func setRunner(_ player: Player?, onBase index: Int) {
         switch index {
@@ -146,7 +153,11 @@ extension Game {
 
     /// Record a plate-appearance outcome: updates the batter's and pitcher's lines, advances
     /// ghost runners (auto-scoring anyone who reaches home), tracks outs, and advances the order.
-    func record(_ outcome: PlateAppearanceOutcome) {
+    ///
+    /// - Parameter resolveBasesExternally: when true, skip all base movement/scoring here — the
+    ///   caller (the live view's ghost-OFF hit flow) places runners station-to-station and prompts
+    ///   "did they score?" for anyone reaching home. Stats, outs, and the batting order still update.
+    func record(_ outcome: PlateAppearanceOutcome, resolveBasesExternally: Bool = false) {
         guard let batter = currentBatterLine, let batterPlayer = batter.player else { return }
 
         batter.batting.record(outcome)
@@ -156,6 +167,7 @@ extension Game {
         // OFF ⇒ we place the batter and force runners only when their base is needed (you advance
         // the discretionary ones by hand on the diamond). Walks/HBP force only as needed in both
         // modes. Raw counting stats above are recorded regardless.
+        if !resolveBasesExternally {
         switch outcome {
         case .single, .double, .triple, .homeRun:
             let baseCount: Int
@@ -184,6 +196,7 @@ extension Game {
             }
         case .out, .strikeout, .strikeoutLooking:
             break // runners hold
+        }
         }
 
         if outcome.isOut {
