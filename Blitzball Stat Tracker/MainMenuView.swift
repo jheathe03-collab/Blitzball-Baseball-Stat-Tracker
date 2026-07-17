@@ -20,7 +20,9 @@ struct MainMenuView: View {
         // This NavigationStack is the ONE stack for the whole menu area. The Season area is
         // value-based (via `path`) so it can pop several levels at once; other features are links.
         NavigationStack(path: $router.seasonPath) {
-            GeometryReader { geo in
+            // The scrolling menu on top, the fixed-height leaders ticker pinned below. The ticker's
+            // animation lives in a UIKit layer (see MarqueeText), so it can't disturb this layout.
+            VStack(spacing: 0) {
                 ScrollView {
                     VStack(spacing: 16) {
                         header
@@ -55,10 +57,9 @@ struct MainMenuView: View {
                         }
                     }
                     .padding(.horizontal, 20)
-                    // Fill at least the screen height so the block centers vertically (still
-                    // scrolls if it ever overflows on a small device).
-                    .frame(minHeight: geo.size.height)
+                    .padding(.vertical, 24)
                 }
+                LeaderTicker()
             }
             // One handler renders every Season screen, at any depth in the season stack.
             .navigationDestination(for: SeasonRoute.self) { route in

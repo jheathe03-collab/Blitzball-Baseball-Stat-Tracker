@@ -12,6 +12,8 @@ import SwiftData
 struct EditPlayerView: View {
     @Bindable var player: Player
     @Environment(\.dismiss) private var dismiss
+    // Everyone on file, to reject a name that collides with a DIFFERENT player.
+    @Query private var allPlayers: [Player]
 
     // Local copies so Cancel discards changes; we only write back on Save.
     @State private var name: String
@@ -21,6 +23,16 @@ struct EditPlayerView: View {
         self.player = player
         _name = State(initialValue: player.name)
         _jerseyText = State(initialValue: player.jerseyNumber.map(String.init) ?? "")
+    }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+
+    /// True when a *different* player already has this name (case-insensitive).
+    private var nameTaken: Bool {
+        !trimmedName.isEmpty && allPlayers.contains {
+            $0 !== player
+            && $0.name.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(trimmedName) == .orderedSame
+        }
     }
 
     var body: some View {
@@ -33,6 +45,13 @@ struct EditPlayerView: View {
                           prompt: Text("Jersey number (optional)").foregroundStyle(.white.opacity(0.5)))
                     .keyboardType(.numberPad)
                     .blitzCardRow()
+
+                if nameTaken {
+                    Text("A player named \u{201C}\(trimmedName)\u{201D} already exists. Pick a different name.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .blitzCardRow()
+                }
             }
             .navigationTitle("Edit Player")
             .navigationBarTitleDisplayMode(.inline)
@@ -43,14 +62,15 @@ struct EditPlayerView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(trimmedName.isEmpty || nameTaken)
                 }
             }
         }
     }
 
     private func save() {
-        player.name = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty, !nameTaken else { return }
+        player.name = trimmedName
         player.jerseyNumber = Int(jerseyText)   // nil if blank/invalid — clears the number
         dismiss()
     }

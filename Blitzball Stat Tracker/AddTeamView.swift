@@ -11,10 +11,21 @@ import SwiftData
 struct AddTeamView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    // Existing teams, so we can reject a duplicate team name.
+    @Query private var allTeams: [Team]
 
     @State private var name = ""
     @State private var logoName: String?
     @State private var showingLogoPicker = false
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+
+    /// True when another team already has this name (case-insensitive).
+    private var nameTaken: Bool {
+        !trimmedName.isEmpty && allTeams.contains {
+            $0.name.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(trimmedName) == .orderedSame
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -36,6 +47,13 @@ struct AddTeamView: View {
                 }
                 .buttonStyle(.plain)
                 .blitzCardRow()
+
+                if nameTaken {
+                    Text("A team named \u{201C}\(trimmedName)\u{201D} already exists. Pick a different name.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .blitzCardRow()
+                }
             }
             .navigationTitle("New Team")
             .navigationBarTitleDisplayMode(.inline)
@@ -49,14 +67,15 @@ struct AddTeamView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") { addTeam() }
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(trimmedName.isEmpty || nameTaken)
                 }
             }
         }
     }
 
     private func addTeam() {
-        let team = Team(name: name.trimmingCharacters(in: .whitespaces), logoName: logoName)
+        guard !trimmedName.isEmpty, !nameTaken else { return }
+        let team = Team(name: trimmedName, logoName: logoName)
         modelContext.insert(team)
         dismiss()
     }

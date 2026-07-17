@@ -16,11 +16,23 @@ struct AddPlayerView: View {
     // How this sheet writes to the database, and how it closes itself.
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    // Everyone already on file, so we can reject a duplicate name.
+    @Query private var allPlayers: [Player]
 
     // View-local memory for what the user is typing. Text fields always deal in Strings,
     // so even the jersey number starts life as text and we convert it when saving.
     @State private var name = ""
     @State private var jerseyText = ""
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+
+    /// True when another player already has this name (case-insensitive). Two players with the
+    /// same name would make their stats impossible to tell apart.
+    private var nameTaken: Bool {
+        !trimmedName.isEmpty && allPlayers.contains {
+            $0.name.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(trimmedName) == .orderedSame
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -35,6 +47,13 @@ struct AddPlayerView: View {
                           prompt: Text("Jersey number (optional)").foregroundStyle(.white.opacity(0.5)))
                     .keyboardType(.numberPad) // show the number keypad
                     .blitzCardRow()
+
+                if nameTaken {
+                    Text("A player named \u{201C}\(trimmedName)\u{201D} already exists. Pick a different name.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .blitzCardRow()
+                }
             }
             .navigationTitle("New Player")
             .navigationBarTitleDisplayMode(.inline)
@@ -47,15 +66,15 @@ struct AddPlayerView: View {
                 // Save creates the player, then closes.
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") { addPlayer() }
-                        // Disabled until a name is entered (ignoring pure whitespace).
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                        // Disabled until a non-empty, non-duplicate name is entered.
+                        .disabled(trimmedName.isEmpty || nameTaken)
                 }
             }
         }
     }
 
     private func addPlayer() {
-        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty, !nameTaken else { return }   // guard against a duplicate slipping through
 
         // `Int(jerseyText)` returns nil if the text isn't a valid number — exactly the
         // optional we want for `jerseyNumber`.
