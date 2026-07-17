@@ -26,6 +26,8 @@ struct PlayersView: View {
     @State private var showingImporter = false
     @State private var pendingImport: PendingImport?
     @State private var importMessage: String?
+    // Multi-player export selection sheet.
+    @State private var showingExport = false
 
     var body: some View {
         // No NavigationStack here anymore — the Main Menu owns it. We just describe the
@@ -85,6 +87,12 @@ struct PlayersView: View {
                     } label: {
                         Label("Import Player…", systemImage: "square.and.arrow.down")
                     }
+                    Button {
+                        showingExport = true
+                    } label: {
+                        Label("Export Players…", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(players.isEmpty)
                 } label: {
                     Label("Add", systemImage: "plus")
                 }
@@ -95,6 +103,9 @@ struct PlayersView: View {
         }
         .sheet(item: $playerToEdit) { player in
             EditPlayerView(player: player)
+        }
+        .sheet(isPresented: $showingExport) {
+            ExportPlayersView(players: players)
         }
         .alert("Delete Player?", isPresented: deletePlayerAlert, presenting: playerPendingDeletion) { player in
             Button("Delete \(player.name)", role: .destructive) {

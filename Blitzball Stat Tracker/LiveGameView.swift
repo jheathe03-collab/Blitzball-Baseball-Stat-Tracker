@@ -50,7 +50,12 @@ struct LiveGameView: View {
                     BasesDiamond(game: game) { index in
                         editingBase = BaseSelection(index: index)
                     }
-                    runButton
+                    // The manual "Run" button is only for ghost-runners-OFF games, where you push
+                    // runners home by hand. With ghost runners ON, hits auto-advance and runs score
+                    // automatically, so a manual button would be redundant (and risk double-counting).
+                    if !game.settings.ghostRunners {
+                        runButton
+                    }
                     Divider()
                     batterSection
                     Divider()
