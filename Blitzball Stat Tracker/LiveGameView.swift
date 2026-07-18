@@ -603,11 +603,25 @@ private struct Scoreboard: View {
                 Text(game.halfInningLabel).font(.headline)
                 Text("\(game.outs) out\(game.outs == 1 ? "" : "s")")
                     .font(.caption).foregroundStyle(.secondary)
+                outsDots
             }
             Spacer()
             teamColumn(role: "Away", logoName: game.awayTeam?.logoName,
                        name: game.awayTeam?.name ?? "Away", score: game.awayScore)
         }
+    }
+
+    /// One dot per out in the inning; filled (white) for outs recorded so far, white outlines for the rest.
+    private var outsDots: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<max(game.settings.outsPerInning, 1), id: \.self) { index in
+                Circle()
+                    .fill(index < game.outs ? Color.white : Color.clear)
+                    .overlay(Circle().stroke(Color.white.opacity(0.8), lineWidth: 1.5))
+                    .frame(width: 9, height: 9)
+            }
+        }
+        .padding(.top, 2)
     }
 
     private func teamColumn(role: String, logoName: String?, name: String, score: Int) -> some View {

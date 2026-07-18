@@ -27,15 +27,15 @@ struct PlayerDetailView: View {
     @Query private var allGames: [Game]
     @State private var gameToDelete: Game?
 
+    // NOTE: these three are computed properties for reuse by non-body code paths (`exportStats`,
+    // toolbar predicates, etc.). Inside `body` we HOIST them into local `let`s once, because each
+    // read redoes the full filter+reduce over every finished stat line — and each stat-line access
+    // decodes a JSON blob. Reading `batting.hits` and `batting.doubles` back-to-back in body would
+    // otherwise decode every blob twice.
     private var batting: BattingStats { player.battingStats(mode: selectedMode, year: selectedYear, season: selectedSeason) }
     private var pitching: PitchingStats { player.pitchingStats(mode: selectedMode, year: selectedYear, season: selectedSeason) }
     // How many finished games are in the current filter (shown as "G" in the totals).
     private var games: Int { player.statLines(mode: selectedMode, year: selectedYear, season: selectedSeason).count }
-    // Innings pitched in the standard "innings.outs" form (16 outs → "5.1"), from outsRecorded.
-    private var inningsPitchedText: String {
-        let outs = pitching.outsRecorded
-        return "\(outs / 3).\(outs % 3)"
-    }
 
     /// Every game this player is part of (a stat line, or as pitcher/runner/DH) — i.e. exactly the
     /// games that block deleting the player. Newest first.
@@ -117,7 +117,17 @@ struct PlayerDetailView: View {
     }
 
     var body: some View {
-        List {
+        // Compute each aggregate ONCE per render (see the note on the properties above). Reading
+        // `batting`/`pitching` inline inside every StatCell would re-filter finalStatLines and
+        // re-decode every stat blob for each cell — 14 batting cells alone = 14× the work.
+        let batting = self.batting
+        let pitching = self.pitching
+        let games = self.games
+        // IP in "innings.outs" form (16 outs → "5.1") — inlined here so it uses the local
+        // `pitching`, not a computed property that would re-invoke the aggregation.
+        let ipText = "\(pitching.outsRecorded / 3).\(pitching.outsRecorded % 3)"
+
+        return List {
             filterSection
 
             Section(header: Text("Batting").foregroundStyle(.white)) {
@@ -158,7 +168,7 @@ struct PlayerDetailView: View {
 
             // Raw pitching counting stats for the current filter.
             Section(header: Text("Pitching Totals").foregroundStyle(.white)) {
-                StatCell(label: "IP", value: inningsPitchedText)
+                StatCell(label: "IP", value: ipText)
                 StatCell(label: "H", value: "\(pitching.hitsAllowed)")
                 StatCell(label: "R", value: "\(pitching.runsAllowed)")
                 StatCell(label: "ER", value: "\(pitching.earnedRuns)")

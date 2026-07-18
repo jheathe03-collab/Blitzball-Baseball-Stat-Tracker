@@ -55,11 +55,11 @@ struct SeasonModeView: View {
             handleImport(result)
         }
         .confirmationDialog(duplicateTitle, isPresented: pendingImportBinding, presenting: pendingImport) { pending in
-            Button("Replace Existing", role: .destructive) { resolve(pending, .replace) }
-            Button("Keep Both") { resolve(pending, .keepBoth) }
+            Button("Update to This Version") { resolve(pending, .replace) }
+            Button("Keep Both Copies") { resolve(pending, .keepBoth) }
             Button("Cancel", role: .cancel) { }
         } message: { pending in
-            Text("A season named \u{201C}\(seasonName(pending))\u{201D} from the same export is already here. Replace that copy, or keep both?")
+            Text("You already have \u{201C}\(seasonName(pending))\u{201D}. Update it with this file to match the sender — your copy is refreshed and everyone's stats stay in sync. Or keep both as separate seasons.")
         }
         .alert("Import Season", isPresented: importMessageBinding) {
             Button("OK", role: .cancel) { }
@@ -84,7 +84,7 @@ struct SeasonModeView: View {
                     pendingImport = PendingSeasonImport(archive: archive, existing: existing)
                 } else {
                     let result = archive.apply(resolution: .keepBoth, existingSeason: nil, context: modelContext)
-                    importMessage = summary(result, name: archive.season.name)
+                    importMessage = summary(result, name: archive.season.name, verb: "Imported")
                 }
             } catch {
                 importMessage = error.localizedDescription
@@ -99,12 +99,13 @@ struct SeasonModeView: View {
             context: modelContext
         )
         pendingImport = nil
-        importMessage = summary(result, name: pending.archive.season.name)
+        let verb = resolution == .replace ? "Updated" : "Added a copy of"
+        importMessage = summary(result, name: pending.archive.season.name, verb: verb)
     }
 
-    private func summary(_ result: (season: Season, players: Int, games: Int), name: String) -> String {
+    private func summary(_ result: (season: Season, players: Int, games: Int), name: String, verb: String) -> String {
         let label = name.isEmpty ? "the season" : "\u{201C}\(name)\u{201D}"
-        return "Imported \(label) — \(result.games) game\(result.games == 1 ? "" : "s"), "
+        return "\(verb) \(label) — \(result.games) game\(result.games == 1 ? "" : "s"), "
             + "\(result.players) player\(result.players == 1 ? "" : "s")."
     }
 
@@ -112,7 +113,7 @@ struct SeasonModeView: View {
         pending.archive.season.name.isEmpty ? "Untitled Season" : pending.archive.season.name
     }
 
-    private var duplicateTitle: String { "Season Already Imported" }
+    private var duplicateTitle: String { "You Already Have This Season" }
 
     private var pendingImportBinding: Binding<Bool> {
         Binding(get: { pendingImport != nil }, set: { if !$0 { pendingImport = nil } })
