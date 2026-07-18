@@ -509,6 +509,8 @@ struct LiveGameView: View {
         if game.awayPitcher == nil || !game.lineup(isHome: false).contains(where: { $0.player === game.awayPitcher }) {
             game.awayPitcher = game.lineup(isHome: false).first?.player
         }
+        // With Force Pitcher Rotation on, the first rotation entry starts on the mound for each side.
+        game.syncStartingPitchersToRotation()
         game.status = .inProgress
     }
 }

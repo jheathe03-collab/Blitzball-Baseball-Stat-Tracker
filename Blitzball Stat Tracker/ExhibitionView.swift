@@ -76,7 +76,41 @@ struct SelectTeamsView: View {
         if game.homePitcher == nil { missing.append(game.homeTeam?.name ?? "the home team") }
         if game.awayPitcher == nil { missing.append(game.awayTeam?.name ?? "the away team") }
         let teams = missing.joined(separator: " and ")
-        return "Set a starting pitcher for \(teams) before starting the game — use the Starting Pitcher option under each team."
+        let what = game.settings.forcePitcherRotation ? "pitching rotation" : "starting pitcher"
+        return "Set a \(what) for \(teams) before starting the game."
+    }
+
+    /// Starting Pitcher — or the Pitching Rotation editor when Force Pitcher Rotation is on.
+    @ViewBuilder
+    private func pitcherRow(isHome: Bool) -> some View {
+        if game.settings.forcePitcherRotation {
+            NavigationLink {
+                PitchingRotationView(game: game, isHome: isHome)
+            } label: {
+                HStack {
+                    Label("Pitching Rotation", systemImage: "arrow.triangle.2.circlepath")
+                    Spacer()
+                    Text(rotationLabel(isHome: isHome))
+                        .font(.subheadline).foregroundStyle(.white.opacity(0.7))
+                }
+            }
+        } else {
+            NavigationLink {
+                StartingPitcherView(game: game, isHome: isHome)
+            } label: {
+                HStack {
+                    Label("Starting Pitcher", systemImage: "baseball.fill")
+                    Spacer()
+                    Text((isHome ? game.homePitcher : game.awayPitcher)?.name ?? "Not set")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func rotationLabel(isHome: Bool) -> String {
+        let count = game.pitchingRotation(isHome: isHome).count
+        return count == 0 ? "Not set" : "\(count) pitcher\(count == 1 ? "" : "s")"
     }
 
     var body: some View {
@@ -92,16 +126,7 @@ struct SelectTeamsView: View {
                     } label: {
                         Label("Batting Order", systemImage: "figure.baseball")
                     }
-                    NavigationLink {
-                        StartingPitcherView(game: game, isHome: true)
-                    } label: {
-                        HStack {
-                            Label("Starting Pitcher", systemImage: "baseball.fill")
-                            Spacer()
-                            Text(game.homePitcher?.name ?? "Not set")
-                                .font(.subheadline).foregroundStyle(.secondary)
-                        }
-                    }
+                    pitcherRow(isHome: true)
                 }
             }
             Section {
@@ -115,16 +140,7 @@ struct SelectTeamsView: View {
                     } label: {
                         Label("Batting Order", systemImage: "figure.baseball")
                     }
-                    NavigationLink {
-                        StartingPitcherView(game: game, isHome: false)
-                    } label: {
-                        HStack {
-                            Label("Starting Pitcher", systemImage: "baseball.fill")
-                            Spacer()
-                            Text(game.awayPitcher?.name ?? "Not set")
-                                .font(.subheadline).foregroundStyle(.secondary)
-                        }
-                    }
+                    pitcherRow(isHome: false)
                 }
             }
 

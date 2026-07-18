@@ -15,6 +15,7 @@ struct TeamDetailView: View {
     @State private var showingAddExisting = false
     @State private var showingCreatePlayer = false
     @State private var showingLogoPicker = false
+    @State private var showingRename = false
     // The member swiped for removal, held while we confirm.
     @State private var memberPendingRemoval: Player?
 
@@ -91,6 +92,15 @@ struct TeamDetailView: View {
         .blitzListStyle()
         .navigationTitle(team.name)
         .blitzballBackground()
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showingRename = true
+                } label: {
+                    Label("Rename Team", systemImage: "pencil")
+                }
+            }
+        }
         // Two sheets: pick existing players, or create a brand-new one that joins this team.
         .sheet(isPresented: $showingAddExisting) {
             AddExistingPlayerView(team: team)
@@ -100,6 +110,9 @@ struct TeamDetailView: View {
         }
         .sheet(isPresented: $showingLogoPicker) {
             TeamLogoPicker(logoName: $team.logoName)
+        }
+        .sheet(isPresented: $showingRename) {
+            EditTeamView(team: team)
         }
         // Confirm before removing a member. This only un-links — the Player record stays.
         .alert("Remove Player?", isPresented: removeMemberAlert, presenting: memberPendingRemoval) { player in

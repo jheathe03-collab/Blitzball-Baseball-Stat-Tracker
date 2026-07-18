@@ -42,6 +42,9 @@ struct GameSettings: Codable, Hashable, Sendable {
     var challenges: Int       // 0...3
     /// A neutral shared player who bats for both teams (for odd rosters). Off by default; opt-in.
     var designatedHitter: Bool
+    /// When on, each team pitches from a set rotation that auto-advances every inning. Off by
+    /// default (defaulted so old blobs — and the preset calls below — don't need to pass it).
+    var forcePitcherRotation: Bool = false
 
     // Allowed ranges, kept next to the data so the UI steppers can reuse them.
     static let inningsRange = 1...9
@@ -80,6 +83,7 @@ extension GameSettings {
     private enum CodingKeys: String, CodingKey {
         case innings, outsPerInning, extraInnings, substitutions, allTeamPitch
         case maxStrikes, maxBalls, ghostRunners, hbpWalks, challenges, designatedHitter
+        case forcePitcherRotation
     }
 
     // Games saved BEFORE `outsPerInning` existed still load (defaulting to 3) instead of failing
@@ -97,5 +101,7 @@ extension GameSettings {
         hbpWalks = try c.decode(Bool.self, forKey: .hbpWalks)
         challenges = try c.decode(Int.self, forKey: .challenges)
         designatedHitter = try c.decode(Bool.self, forKey: .designatedHitter)
+        // Games saved before this option existed load with it OFF.
+        forcePitcherRotation = try c.decodeIfPresent(Bool.self, forKey: .forcePitcherRotation) ?? false
     }
 }

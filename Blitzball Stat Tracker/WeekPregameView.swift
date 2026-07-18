@@ -29,7 +29,8 @@ struct WeekPregameView: View {
         if game.homePitcher == nil { missing.append(game.homeTeam?.name ?? "the home team") }
         if game.awayPitcher == nil { missing.append(game.awayTeam?.name ?? "the away team") }
         let teams = missing.joined(separator: " and ")
-        return "Set a starting pitcher for \(teams) before starting the game — use the Starting Pitcher option under each team."
+        let what = game.settings.forcePitcherRotation ? "pitching rotation" : "starting pitcher"
+        return "Set a \(what) for \(teams) before starting the game."
     }
 
     var body: some View {
@@ -71,6 +72,25 @@ struct WeekPregameView: View {
                               systemImage: "person.badge.plus")
                     }
                 }
+            }
+
+            // Per-game rulebook. Each week's game carries its OWN settings copy, so tweaking these
+            // affects only this game — never other weeks or games already played.
+            Section {
+                NavigationLink {
+                    GameOptionsView(game: game)
+                } label: {
+                    HStack {
+                        Label("Game Options", systemImage: "slider.horizontal.3")
+                        Spacer()
+                        Text(game.settings.matchedType.displayName)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+            } footer: {
+                Text("Rules for this game only — changing them here won't affect other weeks or games already played.")
+                    .foregroundStyle(.white.opacity(0.6))
             }
 
             Section {
@@ -130,17 +150,35 @@ struct WeekPregameView: View {
             } label: {
                 Label("Batting Order", systemImage: "figure.baseball")
             }
-            NavigationLink {
-                StartingPitcherView(game: game, isHome: isHome)
-            } label: {
-                HStack {
-                    Label("Starting Pitcher", systemImage: "baseball.fill")
-                    Spacer()
-                    Text(pitcher?.name ?? "Not set")
-                        .font(.subheadline).foregroundStyle(.secondary)
+            if game.settings.forcePitcherRotation {
+                NavigationLink {
+                    PitchingRotationView(game: game, isHome: isHome)
+                } label: {
+                    HStack {
+                        Label("Pitching Rotation", systemImage: "arrow.triangle.2.circlepath")
+                        Spacer()
+                        Text(rotationLabel(isHome: isHome))
+                            .font(.subheadline).foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+            } else {
+                NavigationLink {
+                    StartingPitcherView(game: game, isHome: isHome)
+                } label: {
+                    HStack {
+                        Label("Starting Pitcher", systemImage: "baseball.fill")
+                        Spacer()
+                        Text(pitcher?.name ?? "Not set")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
                 }
             }
         }
+    }
+
+    private func rotationLabel(isHome: Bool) -> String {
+        let count = game.pitchingRotation(isHome: isHome).count
+        return count == 0 ? "Not set" : "\(count) pitcher\(count == 1 ? "" : "s")"
     }
 
     // This team's record within THIS season (only its finished weeks count).

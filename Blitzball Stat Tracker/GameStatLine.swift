@@ -18,6 +18,10 @@ final class GameStatLine {
     /// Lineup position, used for auto-advancing the batting order.
     var battingOrder: Int
 
+    /// Position in this team's pitching rotation (for the Force Pitcher Rotation option), or -1 when
+    /// this player isn't in the rotation. Additive scalar with a default — old lines migrate to -1.
+    var pitchingOrder: Int = -1
+
     /// Still in the game? (Used when we add substitutions later.)
     var isActive: Bool
 

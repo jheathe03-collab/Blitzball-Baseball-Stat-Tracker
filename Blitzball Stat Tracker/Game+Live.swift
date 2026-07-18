@@ -102,6 +102,44 @@ extension Game {
         return nil
     }
 
+    // MARK: - Force Pitcher Rotation
+
+    /// A team's pitching rotation, in order (only the players the user added to the rotation).
+    func pitchingRotation(isHome: Bool) -> [Player] {
+        teamLineup(isHome: isHome)
+            .filter { $0.pitchingOrder >= 0 }
+            .sorted { $0.pitchingOrder < $1.pitchingOrder }
+            .compactMap(\.player)
+    }
+
+    /// Who should be pitching for `isHome` this inning: the rotation entry for the current inning,
+    /// looping after the last. nil if that team has no rotation set.
+    func scheduledPitcher(isHome: Bool) -> Player? {
+        let rotation = pitchingRotation(isHome: isHome)
+        guard !rotation.isEmpty else { return nil }
+        return rotation[(currentInning - 1) % rotation.count]
+    }
+
+    /// Install the fielding team's scheduled pitcher for the current half-inning (Force Pitcher
+    /// Rotation only). Resets that side's stint outs since it's a fresh appearance.
+    func applyPitcherRotationIfNeeded() {
+        guard settings.forcePitcherRotation else { return }
+        let fieldingIsHome = isTopInning   // home takes the mound in the top half
+        guard let next = scheduledPitcher(isHome: fieldingIsHome) else { return }
+        if fieldingIsHome {
+            if homePitcher !== next { homePitcher = next; homePitcherOuts = 0 }
+        } else {
+            if awayPitcher !== next { awayPitcher = next; awayPitcherOuts = 0 }
+        }
+    }
+
+    /// Seed both starting pitchers from the rotation at kickoff (Force Pitcher Rotation only).
+    func syncStartingPitchersToRotation() {
+        guard settings.forcePitcherRotation else { return }
+        if let first = scheduledPitcher(isHome: true) { homePitcher = first }
+        if let first = scheduledPitcher(isHome: false) { awayPitcher = first }
+    }
+
     /// Team players (both sides, not the DH) who haven't pitched yet — for the End Game warning.
     func playersWhoHaventPitched() -> [Player] {
         guard settings.allTeamPitch else { return [] }
@@ -290,6 +328,8 @@ extension Game {
             currentInning += 1
         }
         ensureInningSlots()
+        // The new fielding team sends in their scheduled pitcher (no-op unless the option is on).
+        applyPitcherRotationIfNeeded()
     }
 
     /// Make sure both per-inning run arrays have a slot for the current inning.

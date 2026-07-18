@@ -35,6 +35,7 @@ struct GameSettingsEditor: View {
                 Toggle("Extra Innings", isOn: $settings.extraInnings)
                 Toggle("Substitutions", isOn: $settings.substitutions)
                 Toggle("All Team Pitch", isOn: $settings.allTeamPitch)
+                Toggle("Force Pitcher Rotation", isOn: $settings.forcePitcherRotation)
 
                 Stepper("Max Strikes: \(settings.maxStrikes)",
                         value: $settings.maxStrikes, in: GameSettings.strikesRange)
