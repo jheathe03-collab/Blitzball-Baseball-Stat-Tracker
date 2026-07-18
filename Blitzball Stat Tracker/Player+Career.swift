@@ -86,20 +86,7 @@ extension Player {
         statLines(inSeason: season).reduce(PitchingStats()) { $0 + $1.pitching }
     }
 
-    // MARK: - Team totals (exclude imported/archived lines)
-
-    // A team's totals should reflect only games actually played in-app under that team. Imported
-    // (archived) history isn't tied to any team, so it's left out — same spirit as excluding the
-    // neutral DH's lines from team totals.
-    var teamStatLines: [GameStatLine] {
-        gameStatLines.filter { $0.game?.status == .final }
-    }
-
-    var teamCareerBatting: BattingStats {
-        teamStatLines.reduce(BattingStats()) { $0 + $1.batting }
-    }
-
-    var teamCareerPitching: PitchingStats {
-        teamStatLines.reduce(PitchingStats()) { $0 + $1.pitching }
-    }
+    // Note: team totals are computed on Team itself (see Team.battingTotals / pitchingTotals),
+    // NOT by summing each player's career. Summing a player's career on the team side would
+    // double-count anyone who ever played for another team. Don't add a "team career" helper here.
 }

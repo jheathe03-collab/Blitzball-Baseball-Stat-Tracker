@@ -104,22 +104,30 @@ private struct LeaderboardCard: View {
     @Query private var games: [Game]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        // Compute each leader tuple ONCE per render. Reading the computed properties inline (the
+        // previous shape) called them twice each — once for the nil-check, once inside the *Text
+        // helpers — and each call redoes the full map+filter+sort over every team/player, which
+        // in turn decodes each stat line's JSON blob. Halving those calls halves the work.
+        let team = topTeam
+        let batter = topBatter
+        let pitcher = topPitcher
+
+        return VStack(alignment: .leading, spacing: 14) {
             Text("Leaderboard")
                 .font(Theme.cardTitle)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .center)
 
-            if topTeam == nil && topBatter == nil && topPitcher == nil {
+            if team == nil && batter == nil && pitcher == nil {
                 Text("Play some games and your league leaders show up here.")
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.6))
                     .frame(maxWidth: .infinity, alignment: .center)
                     .multilineTextAlignment(.center)
             } else {
-                entry(icon: "trophy.fill", label: "Top Team", value: topTeamText)
-                entry(icon: "figure.baseball", label: "Top Batter", value: topBatterText)
-                entry(icon: "baseball.fill", label: "Top Pitcher", value: topPitcherText)
+                entry(icon: "trophy.fill",     label: "Top Team",    value: text(team: team))
+                entry(icon: "figure.baseball", label: "Top Batter",  value: text(batter: batter))
+                entry(icon: "baseball.fill",   label: "Top Pitcher", value: text(pitcher: pitcher))
             }
         }
         .padding()
@@ -174,19 +182,22 @@ private struct LeaderboardCard: View {
             .first
     }
 
-    private var topTeamText: String {
-        guard let t = topTeam else { return "—" }
+    // Formatters take the pre-computed tuple (rather than reading `topTeam` etc. again) so `body`
+    // stays the single site that touches the expensive leader computations.
+
+    private func text(team: (team: Team, record: (wins: Int, losses: Int))?) -> String {
+        guard let t = team else { return "—" }
         let w = t.record.wins, l = t.record.losses
         return "\(t.team.name) · \(w) Win\(w == 1 ? "" : "s")  \(l) Loss\(l == 1 ? "" : "es")"
     }
 
-    private var topBatterText: String {
-        guard let b = topBatter else { return "—" }
+    private func text(batter: (player: Player, stats: BattingStats)?) -> String {
+        guard let b = batter else { return "—" }
         return "\(b.player.name) · \(StatFormat.rate(b.stats.battingAverage)) AVG  \(StatFormat.rate(b.stats.onBasePlusSlugging)) OPS"
     }
 
-    private var topPitcherText: String {
-        guard let p = topPitcher else { return "—" }
+    private func text(pitcher: (player: Player, stats: PitchingStats)?) -> String {
+        guard let p = pitcher else { return "—" }
         return "\(p.player.name) · \(StatFormat.ratio(p.stats.earnedRunAverage)) ERA"
     }
 }

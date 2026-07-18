@@ -47,16 +47,29 @@ final class Team {
 // MARK: - Aggregated team stats (computed from the roster)
 
 extension Team {
-    /// The whole roster's batting summed into one line. `reduce` starts from an empty
-    /// `BattingStats()` and keeps adding each player's `batting` with our `+` operator.
-    /// Uses `teamCareerBatting` so imported/archived history (not tied to this team) is excluded.
-    var battingTotals: BattingStats {
-        players.reduce(BattingStats()) { running, player in running + player.teamCareerBatting }
+    /// Every stat line the current roster actually earned wearing THIS team's uniform. We can't
+    /// just sum each player's career, because a player who used to be on another team would drag
+    /// those other-team games in and double-count. Instead we keep only lines whose game had this
+    /// team on the matching side (home/away), and drop the neutral Designated Hitter's lines (they
+    /// belong to neither team — see the DH note in the project docs). Imported/archived lines
+    /// (game == nil) are naturally excluded by the `guard let game` here.
+    private var teamStatLines: [GameStatLine] {
+        players.flatMap { player in
+            player.gameStatLines.filter { line in
+                guard !line.isDH, let game = line.game, game.status == .final else { return false }
+                return line.isHome ? (game.homeTeam === self) : (game.awayTeam === self)
+            }
+        }
     }
 
-    /// The whole roster's pitching summed into one line (also excludes imported/archived history).
+    /// The whole roster's batting summed into one line — only games played FOR this team count.
+    var battingTotals: BattingStats {
+        teamStatLines.reduce(BattingStats()) { $0 + $1.batting }
+    }
+
+    /// The whole roster's pitching summed into one line — only games played FOR this team count.
     var pitchingTotals: PitchingStats {
-        players.reduce(PitchingStats()) { running, player in running + player.teamCareerPitching }
+        teamStatLines.reduce(PitchingStats()) { $0 + $1.pitching }
     }
 
     /// Win/Loss record DERIVED from finished games (games are the source). Pass the games list

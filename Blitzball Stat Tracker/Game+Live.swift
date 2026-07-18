@@ -122,15 +122,30 @@ extension Game {
 
     /// Install the fielding team's scheduled pitcher for the current half-inning (Force Pitcher
     /// Rotation only). Resets that side's stint outs since it's a fresh appearance.
+    ///
+    /// Respects manual overrides: if the current pitcher isn't the one the rotation put on the
+    /// mound last time this side fielded (e.g. the user tapped Select Pitcher for an injury sub),
+    /// we leave them in. Silently stomping a user-chosen reliever every half-inning would undo the
+    /// override with no UI signal. Rotation resumes automatically the moment the user puts the
+    /// scheduled pitcher back on the mound.
     func applyPitcherRotationIfNeeded() {
         guard settings.forcePitcherRotation else { return }
         let fieldingIsHome = isTopInning   // home takes the mound in the top half
-        guard let next = scheduledPitcher(isHome: fieldingIsHome) else { return }
-        if fieldingIsHome {
-            if homePitcher !== next { homePitcher = next; homePitcherOuts = 0 }
-        } else {
-            if awayPitcher !== next { awayPitcher = next; awayPitcherOuts = 0 }
-        }
+        let rotation = pitchingRotation(isHome: fieldingIsHome)
+        guard !rotation.isEmpty else { return }
+        let next = rotation[(currentInning - 1) % rotation.count]
+        let current = fieldingIsHome ? homePitcher : awayPitcher
+        guard current !== next else { return }   // already on the scheduled pitcher
+
+        // Only auto-advance when this side is still on-schedule: current is nil (no pitcher set
+        // yet) OR current is the pitcher the rotation put in LAST time this side fielded.
+        let previouslyScheduled: Player? = currentInning >= 2
+            ? rotation[(currentInning - 2) % rotation.count]
+            : nil
+        guard current == nil || current === previouslyScheduled else { return }
+
+        if fieldingIsHome { homePitcher = next; homePitcherOuts = 0 }
+        else              { awayPitcher = next; awayPitcherOuts = 0 }
     }
 
     /// Seed both starting pitchers from the rotation at kickoff (Force Pitcher Rotation only).

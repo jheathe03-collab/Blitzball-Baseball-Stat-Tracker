@@ -45,10 +45,10 @@ struct LeaderTicker: View {
             ("Singles", { $0.singles }),
             ("Doubles", { $0.doubles }),
             ("Triples", { $0.triples }),
-            ("Walks",   { $0.walks }),
+            ("Walks - Batting",   { $0.walks }),
             ("HBP",     { $0.hitByPitch }),
-            ("Ks",      { $0.strikeouts }),
-            ("Kʟ",      { $0.strikeoutsLooking }),
+            ("Ks - Batting",      { $0.strikeouts }),
+            ("Kʟ - Batting",      { $0.strikeoutsLooking }),
         ]
 
         let parts: [String] = categories.compactMap { label, stat in

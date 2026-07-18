@@ -39,12 +39,19 @@ struct PlayerDetailView: View {
 
     /// Every game this player is part of (a stat line, or as pitcher/runner/DH) — i.e. exactly the
     /// games that block deleting the player. Newest first.
+    ///
+    /// We hide SEASON-owned setup weeks: they belong to the season schedule (managed from Resume
+    /// Season), the swipe-to-delete is disabled for them anyway (see below), and showing them just
+    /// clutters the card. But we DO keep non-season setup games (Exhibition drafts the user
+    /// abandoned) — those are swipeable, and hiding them would create a dead-end where deletion is
+    /// blocked but the user has no visible game to remove.
     private var playerGames: [Game] {
         allGames.filter { game in
-            game.homePitcher === player || game.awayPitcher === player
-            || game.runnerFirst === player || game.runnerSecond === player
-            || game.runnerThird === player || game.designatedHitter === player
-            || game.statLines.contains { $0.player === player }
+            if game.status == .setup && game.season != nil { return false }
+            return game.homePitcher === player || game.awayPitcher === player
+                || game.runnerFirst === player || game.runnerSecond === player
+                || game.runnerThird === player || game.designatedHitter === player
+                || game.statLines.contains { $0.player === player }
         }
         .sorted { $0.createdAt > $1.createdAt }
     }

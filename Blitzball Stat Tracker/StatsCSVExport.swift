@@ -227,13 +227,26 @@ enum StatsCSV {
         rows.map { $0.map(field).joined(separator: ",") }.joined(separator: "\n")
     }
 
-    /// CSV-escape one field: wrap in quotes (doubling internal quotes) if it has a comma, quote,
-    /// or newline. Keeps names like "O'Brien, Jr." from shifting columns.
+    /// CSV-escape one field:
+    ///   1. Neutralize formula-injection prefixes. Excel / Numbers / Google Sheets treat a cell
+    ///      starting with `=`, `+`, `-`, `@`, tab, or CR as a formula — so a team name like
+    ///      `=HYPERLINK(...)` becomes an active hyperlink on import, and older Excel builds could
+    ///      run `=cmd|'/c calc'!A0`. Prepending a single quote makes those cells literal text
+    ///      (Excel treats leading `'` as an invisible text-prefix marker; other tools may show
+    ///      it, which is an acceptable trade for correctness).
+    ///   2. Wrap in quotes (doubling internal quotes) if the value contains a comma, a quote,
+    ///      LF, or CR — so names like "O'Brien, Jr." don't shift columns, and Word/Windows
+    ///      paste artifacts (`\r`) don't split the row.
     private static func field(_ value: String) -> String {
-        if value.contains(",") || value.contains("\"") || value.contains("\n") {
-            return "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        let injectionPrefixes: Set<Character> = ["=", "+", "-", "@", "\t", "\r"]
+        var v = value
+        if let first = v.first, injectionPrefixes.contains(first) {
+            v = "'" + v
         }
-        return value
+        if v.contains(",") || v.contains("\"") || v.contains("\n") || v.contains("\r") {
+            return "\"" + v.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        }
+        return v
     }
 
     // MARK: - File writing

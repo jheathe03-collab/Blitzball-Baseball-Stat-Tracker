@@ -203,10 +203,14 @@ extension PlayerArchive {
             target = existing
         }
 
+        // Skip DTOs that already exist on the target player (that's what protects re-import from
+        // doubling data). Do NOT dedup DTOs against EACH OTHER — two archive entries with the same
+        // key represent two real historical games on the source device (a doubleheader vs. the same
+        // opponent, or two same-day exhibitions on the same side), and both should come across.
         var added = 0
         for dto in statLines {
             let key = ArchivedLineKey(dto: dto)
-            guard existingKeys.insert(key).inserted else { continue }
+            if existingKeys.contains(key) { continue }
             makeLine(from: dto, for: target, in: context)
             added += 1
         }
