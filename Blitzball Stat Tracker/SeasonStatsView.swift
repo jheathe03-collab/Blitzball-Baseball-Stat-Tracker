@@ -74,8 +74,15 @@ struct SeasonStatsDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: exportCSV) {
-                    Label("Export Spreadsheet", systemImage: "square.and.arrow.up")
+                Menu {
+                    Button(action: exportCSV) {
+                        Label("Spreadsheet (CSV)", systemImage: "tablecells")
+                    }
+                    Button(action: exportSeasonFile) {
+                        Label("Season File (.json)", systemImage: "square.and.arrow.up.on.square")
+                    }
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
             }
         }
@@ -98,6 +105,17 @@ struct SeasonStatsDetailView: View {
             let csv = StatsCSV.seasonCSV(season)
             let base = season.name.isEmpty ? "Season" : season.name
             exportFile = CSVExportFile(url: try StatsCSV.writeTempFile(csv, baseName: base))
+        } catch {
+            exportError = error.localizedDescription
+        }
+    }
+
+    /// Export the full season as a portable archive file (move it to another device, then Import Season).
+    private func exportSeasonFile() {
+        do {
+            let base = season.name.isEmpty ? "Season" : season.name
+            let url = try SeasonArchive(exporting: season).writeTempFile(seasonName: base)
+            exportFile = CSVExportFile(url: url)
         } catch {
             exportError = error.localizedDescription
         }
