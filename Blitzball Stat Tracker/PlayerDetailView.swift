@@ -158,6 +158,7 @@ struct PlayerDetailView: View {
                 StatCell(label: "K", value: "\(batting.strikeouts)")
                 StatCell(label: "Kʟ", value: "\(batting.strikeoutsLooking)")
                 StatCell(label: "HBP", value: "\(batting.hitByPitch)")
+                StatCell(label: "SB", value: "\(batting.stolenBases)")
             }
             .blitzCardRow()
 

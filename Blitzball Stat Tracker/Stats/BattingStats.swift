@@ -40,6 +40,8 @@ public struct BattingStats: Codable, Hashable, Sendable {
     public var sacrificeFlies: Int
     /// Strikeouts LOOKING — the "backwards K" (called third strike). A subset of `strikeouts`.
     public var strikeoutsLooking: Int
+    /// Stolen bases. A pure counting stat, credited to the baserunner.
+    public var stolenBases: Int
 
     /// A memberwise initializer with sensible defaults, so you can create an empty line with
     /// `BattingStats()` and fill in only what you have.
@@ -56,7 +58,8 @@ public struct BattingStats: Codable, Hashable, Sendable {
         hitByPitch: Int = 0,
         strikeouts: Int = 0,
         sacrificeFlies: Int = 0,
-        strikeoutsLooking: Int = 0
+        strikeoutsLooking: Int = 0,
+        stolenBases: Int = 0
     ) {
         self.plateAppearances = plateAppearances
         self.atBats = atBats
@@ -71,6 +74,7 @@ public struct BattingStats: Codable, Hashable, Sendable {
         self.strikeouts = strikeouts
         self.sacrificeFlies = sacrificeFlies
         self.strikeoutsLooking = strikeoutsLooking
+        self.stolenBases = stolenBases
     }
 
     // MARK: - Derived building blocks
@@ -138,7 +142,8 @@ extension BattingStats {
             hitByPitch: lhs.hitByPitch + rhs.hitByPitch,
             strikeouts: lhs.strikeouts + rhs.strikeouts,
             sacrificeFlies: lhs.sacrificeFlies + rhs.sacrificeFlies,
-            strikeoutsLooking: lhs.strikeoutsLooking + rhs.strikeoutsLooking
+            strikeoutsLooking: lhs.strikeoutsLooking + rhs.strikeoutsLooking,
+            stolenBases: lhs.stolenBases + rhs.stolenBases
         )
     }
 }
@@ -152,6 +157,7 @@ extension BattingStats {
     private enum CodingKeys: String, CodingKey {
         case plateAppearances, atBats, hits, doubles, triples, homeRuns, rbi
         case runsScored, walks, hitByPitch, strikeouts, sacrificeFlies, strikeoutsLooking
+        case stolenBases
     }
 
     public init(from decoder: Decoder) throws {
@@ -169,6 +175,7 @@ extension BattingStats {
         strikeouts = try c.decodeIfPresent(Int.self, forKey: .strikeouts) ?? 0
         sacrificeFlies = try c.decodeIfPresent(Int.self, forKey: .sacrificeFlies) ?? 0
         strikeoutsLooking = try c.decodeIfPresent(Int.self, forKey: .strikeoutsLooking) ?? 0
+        stolenBases = try c.decodeIfPresent(Int.self, forKey: .stolenBases) ?? 0
     }
 }
 

@@ -74,7 +74,7 @@ struct TeamsView: View {
                             }
                         }
                         NavigationLink(destination: AllTeamsStatsView()) {
-                            Label("All Teams Stats", systemImage: "tablecells")
+                            Label("Stat Leaders", systemImage: "chart.bar")
                         }
                     }
                     .blitzCardRow()

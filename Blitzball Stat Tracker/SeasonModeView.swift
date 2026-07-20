@@ -35,7 +35,7 @@ struct SeasonModeView: View {
                     Label("Import Season…", systemImage: "square.and.arrow.down")
                 }
             } footer: {
-                Text("Bring in a season file exported from another device (Season Stats → Export → Season File).")
+                Text("Bring in a season file exported from another device (View Seasons → Export → Season File).")
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.99))
             }

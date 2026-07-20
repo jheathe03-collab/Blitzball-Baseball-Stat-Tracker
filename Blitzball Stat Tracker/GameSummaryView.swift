@@ -109,7 +109,7 @@ private struct BattingBox: View {
     let lines: [GameStatLine]
     var showTotals: Bool = true
 
-    private let headers = ["AB", "R", "H", "RBI", "BB", "K", "AVG", "OPS"]
+    private let headers = ["AB", "R", "H", "RBI", "BB", "K", "SB", "AVG", "OPS"]
     private var totals: BattingStats {
         lines.reduce(BattingStats()) { $0 + $1.batting }
     }
@@ -145,6 +145,7 @@ private struct BattingBox: View {
             Text("\(b.rbi)")
             Text("\(b.walks)")
             Text("\(b.strikeouts)")
+            Text("\(b.stolenBases)")
             Text(StatFormat.rate(b.battingAverage))
             Text(StatFormat.rate(b.onBasePlusSlugging))
         }

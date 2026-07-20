@@ -18,6 +18,7 @@ struct LiveGameView: View {
     @State private var showSplash = true
     @State private var showEndConfirm = false
     @State private var showBatterPicker = false
+    @State private var showStealPicker = false
     @State private var showPitcherPicker = false
     @State private var showSubstitution = false
     @State private var editingBase: BaseSelection?
@@ -114,6 +115,13 @@ struct LiveGameView: View {
         }
         .sheet(isPresented: $showSubstitution) {
             SubstitutionView(game: game)
+        }
+        // Credit a stolen base to any batter in the lineup (undoable).
+        .sheet(isPresented: $showStealPicker) {
+            LinePicker(title: "Stolen Base — who?", lines: game.battingLineup,
+                       subtitle: "Credit the stolen base to the baserunner.") { line in
+                perform { line.batting.stolenBases += 1 }
+            }
         }
         .alert("Can't Swap Pitcher", isPresented: pitcherChangeAlert, presenting: pitcherChangeError) { _ in
             Button("Override (injury)") {
@@ -422,6 +430,15 @@ struct LiveGameView: View {
                 HStack {
                     Text(batter.player?.name ?? "—").font(.title3).bold()
                     Spacer()
+                    // Steal credits a baserunner, so it opens a picker rather than acting on the
+                    // current batter.
+                    Button {
+                        showStealPicker = true
+                    } label: {
+                        Label("Steal", systemImage: "figure.run")
+                            .font(.subheadline.bold())
+                    }
+                    .buttonStyle(.bordered)
                     challengeButton
                 }
 
