@@ -18,15 +18,6 @@ struct TeamsView: View {
     @State private var teamPendingDeletion: Team?
     // A team the user tried to delete while it's still used by a game (blocked to avoid a crash).
     @State private var teamInUse: Team?
-    // A game swiped for deletion in the Game History list, held while we confirm.
-    @State private var gameToDelete: Game?
-
-    /// Played games (finished or in-progress) across the whole league, newest first — the drafts
-    /// (setup weeks / unstarted exhibitions) are excluded.
-    private var playedGames: [Game] {
-        games.filter { $0.status != .setup }
-            .sorted { $0.createdAt > $1.createdAt }
-    }
 
     var body: some View {
         Group {
@@ -44,7 +35,7 @@ struct TeamsView: View {
                         ForEach(teams) { team in
                             NavigationLink(destination: TeamDetailView(team: team)) {
                                 HStack {
-                                    TeamLogoView(logoName: team.logoName, size: 28)
+                                    TeamLogoView(team: team, size: 28)
                                     Text(team.name)
                                         .font(.headline)
                                     Spacer()
@@ -73,7 +64,7 @@ struct TeamsView: View {
                         ForEach(teams) { team in
                             let record = team.record(from: games)
                             HStack {
-                                TeamLogoView(logoName: team.logoName, size: 24)
+                                TeamLogoView(team: team, size: 24)
                                 Text(team.name)
                                 Spacer()
                                 Text("Wins \(record.wins)  Losses \(record.losses)")
@@ -87,31 +78,6 @@ struct TeamsView: View {
                         }
                     }
                     .blitzCardRow()
-
-                    // Every played game — tap to open its box score (Game Summary).
-                    if !playedGames.isEmpty {
-                        Section {
-                            ForEach(playedGames, id: \.persistentModelID) { game in
-                                NavigationLink(destination: GameSummaryView(game: game)) {
-                                    gameRow(game)
-                                }
-                                .swipeActions(edge: .trailing) {
-                                    // Season games are removed via the season, not one at a time.
-                                    if game.season == nil {
-                                        Button(role: .destructive) { gameToDelete = game } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                                }
-                            }
-                        } header: {
-                            Text("Game History").foregroundStyle(.white)
-                        } footer: {
-                            Text("Tap a game to see its summary. Swipe an exhibition or tournament game to delete it.")
-                                .foregroundStyle(.white.opacity(0.55))
-                        }
-                        .blitzCardRow()
-                    }
                 }
                 .blitzListStyle()
             }
@@ -146,47 +112,6 @@ struct TeamsView: View {
         } message: { team in
             Text(inUseMessage(for: team))
         }
-        // Confirm deleting a game from the Game History list.
-        .alert("Delete Game?", isPresented: gameDeleteAlert, presenting: gameToDelete) { game in
-            Button("Delete Game", role: .destructive) {
-                modelContext.delete(game)
-                gameToDelete = nil
-            }
-            Button("Cancel", role: .cancel) { gameToDelete = nil }
-        } message: { _ in
-            Text("This permanently deletes this game and everyone's stats from it. This can't be undone.")
-        }
-    }
-
-    // MARK: - Game history rows
-
-    private func gameRow(_ game: Game) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("\(game.homeTeam?.name ?? "Home") \(game.homeScore)–\(game.awayScore) \(game.awayTeam?.name ?? "Away")")
-                .font(.subheadline)
-                .foregroundStyle(.white)
-            Text(gameSubtitle(game))
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
-        }
-    }
-
-    private func gameSubtitle(_ game: Game) -> String {
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        let date = df.string(from: game.createdAt)
-        let kind: String
-        switch game.mode {
-        case .exhibition: kind = "Exhibition"
-        case .season:     kind = (game.season?.name).flatMap { $0.isEmpty ? nil : $0 } ?? "Season"
-        case .tournament: kind = "Tournament"
-        }
-        let status = game.status == .final ? "" : " · In progress"
-        return "\(kind) · \(date)\(status)"
-    }
-
-    private var gameDeleteAlert: Binding<Bool> {
-        Binding(get: { gameToDelete != nil }, set: { if !$0 { gameToDelete = nil } })
     }
 
     /// Games (season or exhibition) that still reference this team on either side.

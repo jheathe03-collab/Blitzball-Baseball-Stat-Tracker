@@ -32,7 +32,7 @@ struct SplashView: View {
                     .scaleEffect(animateIn ? 1.0 : 0.6)
                     .opacity(animateIn ? 1.0 : 0.0)
 
-                Text("Stat Tracker")
+                Text("Track Your Stats")
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
                     .opacity(animateIn ? 1.0 : 0.0)

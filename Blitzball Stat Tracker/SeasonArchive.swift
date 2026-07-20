@@ -48,6 +48,7 @@ struct SeasonArchive: Codable {
     struct TeamDTO: Codable {
         var name: String
         var logoName: String?
+        var logoImageData: Data?      // custom logo photo (optional). Encodes as base64 in JSON.
         var league: String?
         var dateAdded: Date
         var roster: [String]          // player names
@@ -72,6 +73,12 @@ struct SeasonArchive: Codable {
         var awayPitchingSwaps: Int
         var homePitcherOuts: Int
         var awayPitcherOuts: Int
+        // Challenge tallies. Optional so season files made before challenges existed still decode
+        // (missing key → nil → treated as 0 on import). Keeps archive currentVersion at 1.
+        var homeChallengesUsed: Int?
+        var awayChallengesUsed: Int?
+        var homeChallengesWon: Int?
+        var awayChallengesWon: Int?
 
         // Relationships, by name
         var homeTeam: String?
@@ -163,8 +170,8 @@ extension SeasonArchive {
             PlayerDTO(name: $0.name, jerseyNumber: $0.jerseyNumber, dateAdded: $0.dateAdded)
         }
         teams = teamList.map {
-            TeamDTO(name: $0.name, logoName: $0.logoName, league: $0.league,
-                    dateAdded: $0.dateAdded, roster: $0.players.map(\.name))
+            TeamDTO(name: $0.name, logoName: $0.logoName, logoImageData: $0.logoImageData,
+                    league: $0.league, dateAdded: $0.dateAdded, roster: $0.players.map(\.name))
         }
         games = season.games
             .sorted { $0.weekNumber < $1.weekNumber }
@@ -207,6 +214,10 @@ extension SeasonArchive.GameDTO {
         awayPitchingSwaps = game.awayPitchingSwaps
         homePitcherOuts = game.homePitcherOuts
         awayPitcherOuts = game.awayPitcherOuts
+        homeChallengesUsed = game.homeChallengesUsed
+        awayChallengesUsed = game.awayChallengesUsed
+        homeChallengesWon = game.homeChallengesWon
+        awayChallengesWon = game.awayChallengesWon
         homeTeam = game.homeTeam?.name
         awayTeam = game.awayTeam?.name
         homePitcher = game.homePitcher?.name
@@ -317,7 +328,8 @@ extension SeasonArchive {
             if let existing = existingTeams.first(where: { $0.name.caseInsensitiveCompare(dto.name) == .orderedSame }) {
                 team = existing   // keep its existing name/logo untouched
             } else {
-                let t = Team(name: dto.name, league: dto.league, logoName: dto.logoName, dateAdded: dto.dateAdded)
+                let t = Team(name: dto.name, league: dto.league, logoName: dto.logoName,
+                             logoImageData: dto.logoImageData, dateAdded: dto.dateAdded)
                 context.insert(t)
                 team = t
             }
@@ -368,6 +380,10 @@ extension SeasonArchive {
             g.awayPitchingSwaps = gdto.awayPitchingSwaps
             g.homePitcherOuts = gdto.homePitcherOuts
             g.awayPitcherOuts = gdto.awayPitcherOuts
+            g.homeChallengesUsed = gdto.homeChallengesUsed ?? 0
+            g.awayChallengesUsed = gdto.awayChallengesUsed ?? 0
+            g.homeChallengesWon = gdto.homeChallengesWon ?? 0
+            g.awayChallengesWon = gdto.awayChallengesWon ?? 0
             g.homePitcher = player(gdto.homePitcher)
             g.awayPitcher = player(gdto.awayPitcher)
             g.runnerFirst = player(gdto.runnerFirst)

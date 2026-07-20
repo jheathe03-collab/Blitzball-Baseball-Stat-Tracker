@@ -81,6 +81,14 @@ final class Game {
     var homePitcherOuts: Int = 0
     var awayPitcherOuts: Int = 0
 
+    // Challenge bookkeeping (per side), used only when `settings.challenges > 0`. A FAILED challenge
+    // counts against the cap (`...Used`); a SUCCESSFUL one is retained (`...Won`, display-only). See
+    // Game+Challenges for the derived remaining count.
+    var homeChallengesUsed: Int = 0
+    var awayChallengesUsed: Int = 0
+    var homeChallengesWon: Int = 0
+    var awayChallengesWon: Int = 0
+
     /// The current pitcher for each side. The ACTIVE pitcher is the fielding side's — home
     /// pitches during the top of the inning, away during the bottom.
     @Relationship var homePitcher: Player?
@@ -104,7 +112,7 @@ final class Game {
         status: GameStatus = .setup,
         homeTeam: Team? = nil,
         awayTeam: Team? = nil,
-        settings: GameSettings = .blitzballDefaults
+        settings: GameSettings = .baseballDefaults
     ) {
         self.createdAt = createdAt
         self.status = status
@@ -117,7 +125,7 @@ final class Game {
 extension Game {
     /// This game's rulebook, decoded from its blob. Setting re-encodes it.
     var settings: GameSettings {
-        get { BlobCoder.decode(settingsData) ?? .blitzballDefaults }
+        get { BlobCoder.decode(settingsData) ?? .baseballDefaults }
         set { settingsData = BlobCoder.encode(newValue) }
     }
 

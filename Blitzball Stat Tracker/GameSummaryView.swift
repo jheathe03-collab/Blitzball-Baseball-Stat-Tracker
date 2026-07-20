@@ -32,6 +32,10 @@ struct GameSummaryView: View {
             VStack(alignment: .leading, spacing: 20) {
                 finalScoreHeader
 
+                // Inning-by-inning line for the whole game (both teams), read-only.
+                Text("Line Score").font(.headline)
+                LineScore(game: game)
+
                 Picker("Team", selection: $showingHome) {
                     Text(game.homeTeam?.name ?? "Home").tag(true)
                     Text(game.awayTeam?.name ?? "Away").tag(false)
@@ -90,7 +94,7 @@ struct GameSummaryView: View {
 
     private func teamScore(team: Team?, score: Int, fallback: String) -> some View {
         VStack(spacing: 6) {
-            TeamLogoView(logoName: team?.logoName, size: 48)
+            TeamLogoView(team: team, size: 48)
             Text(team?.name ?? fallback)
                 .font(.caption).lineLimit(1).minimumScaleFactor(0.7)
             Text("\(score)").font(.title.bold()).monospacedDigit()

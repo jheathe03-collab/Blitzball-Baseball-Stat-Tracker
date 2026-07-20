@@ -38,6 +38,10 @@ struct LiveGameView: View {
     // prompt currently on screen (nil when none).
     @State private var resolution: HitResolution?
     @State private var currentScoringPrompt: ScoringPrompt?
+    // Challenge flow (opt-in via settings.challenges): step 1 asks whose challenge; picking a team
+    // stashes it here so step 2 can ask the result (successful/failed).
+    @State private var showChallengeTeamPicker = false
+    @State private var challengeTeamIsHome: Bool?
 
     var body: some View {
         // Once the game is over, this same screen becomes the box score.
@@ -166,6 +170,14 @@ struct LiveGameView: View {
         } message: { prompt in
             Text(prompt.message)
         }
+        // Challenge flow (two-step: whose challenge → result). Extracted into its own modifier to
+        // keep this view's modifier chain short enough for the Swift type-checker.
+        .modifier(ChallengeDialogs(
+            game: game,
+            showTeamPicker: $showChallengeTeamPicker,
+            teamIsHome: $challengeTeamIsHome,
+            onRecord: recordChallenge
+        ))
     }
 
     // MARK: - Score a run (ghost-off discretionary scoring)
@@ -349,6 +361,17 @@ struct LiveGameView: View {
         game.restore(from: snapshot)
     }
 
+    // MARK: - Challenges
+
+    /// Apply the chosen result to the chosen team. Snapshot first so Undo reverts it (no finishPlay:
+    /// a challenge changes no outs/score).
+    private func recordChallenge(success: Bool) {
+        guard let isHome = challengeTeamIsHome else { return }
+        pushUndo()
+        game.recordChallenge(isHome: isHome, success: success)
+        challengeTeamIsHome = nil
+    }
+
     private func attemptPitcherChange(_ player: Player) {
         if let error = game.changePitcher(to: player, override: false) {
             pendingPitcher = player
@@ -396,7 +419,11 @@ struct LiveGameView: View {
             }
 
             if let batter = game.currentBatterLine {
-                Text(batter.player?.name ?? "—").font(.title3).bold()
+                HStack {
+                    Text(batter.player?.name ?? "—").font(.title3).bold()
+                    Spacer()
+                    challengeButton
+                }
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 8) {
                     ForEach(availableOutcomes, id: \.self) { outcome in
@@ -411,6 +438,22 @@ struct LiveGameView: View {
                 Text("No batters — add players to this team's roster.")
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// Challenge button — only when challenges are enabled; disabled once both teams are out.
+    @ViewBuilder
+    private var challengeButton: some View {
+        if game.settings.challenges > 0 {
+            Button {
+                showChallengeTeamPicker = true
+            } label: {
+                Label("Challenge", systemImage: "flag.fill")
+                    .font(.subheadline.bold())
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .disabled(!game.anyChallengesRemaining)
         }
     }
 
@@ -596,7 +639,7 @@ private struct Scoreboard: View {
 
     var body: some View {
         HStack(alignment: .center) {
-            teamColumn(role: "Home", logoName: game.homeTeam?.logoName,
+            teamColumn(role: "Home", isHome: true, team: game.homeTeam,
                        name: game.homeTeam?.name ?? "Home", score: game.homeScore)
             Spacer()
             VStack(spacing: 4) {
@@ -606,7 +649,7 @@ private struct Scoreboard: View {
                 outsDots
             }
             Spacer()
-            teamColumn(role: "Away", logoName: game.awayTeam?.logoName,
+            teamColumn(role: "Away", isHome: false, team: game.awayTeam,
                        name: game.awayTeam?.name ?? "Away", score: game.awayScore)
         }
     }
@@ -624,65 +667,70 @@ private struct Scoreboard: View {
         .padding(.top, 2)
     }
 
-    private func teamColumn(role: String, logoName: String?, name: String, score: Int) -> some View {
+    private func teamColumn(role: String, isHome: Bool, team: Team?, name: String, score: Int) -> some View {
         VStack(spacing: 2) {
             Text(role.uppercased())
                 .font(.caption2).bold()
                 .foregroundStyle(.secondary)
-            TeamLogoView(logoName: logoName, size: 44)
+            TeamLogoView(team: team, size: 44)
             Text(name).font(.subheadline).bold().lineLimit(1)
             Text("\(score)").font(.largeTitle).monospacedDigit()
+            // Challenge tally (only when the setting is on): "used of max", plus upheld count.
+            if game.settings.challenges > 0 {
+                Text("Challenges: \(game.challengesUsed(isHome: isHome)) of \(game.settings.challenges)")
+                    .font(.caption2).foregroundStyle(.secondary)
+                if game.challengesWon(isHome: isHome) > 0 {
+                    Text("\(game.challengesWon(isHome: isHome)) upheld")
+                        .font(.caption2).foregroundStyle(.green)
+                }
+            }
         }
         .frame(maxWidth: .infinity)
     }
 }
 
-// MARK: - Line score (per-inning runs + R/H/E), with tap-to-edit run cells
+// MARK: - Challenge dialogs
 
-private struct LineScore: View {
+/// The two-step challenge flow (whose challenge → result), bundled as a modifier so LiveGameView's
+/// long presentation chain stays under the Swift type-checker's complexity limit.
+private struct ChallengeDialogs: ViewModifier {
     @Bindable var game: Game
-    let onAdjust: (_ isHome: Bool, _ inning: Int, _ delta: Int) -> Void
+    @Binding var showTeamPicker: Bool
+    @Binding var teamIsHome: Bool?
+    /// Called with the chosen result (true = successful/overturned).
+    let onRecord: (Bool) -> Void
 
-    private var inningCount: Int {
-        max(game.currentInning, game.awayInningRuns.count, game.homeInningRuns.count, 1)
+    func body(content: Content) -> some View {
+        content
+            // Step 1: whose challenge? Only teams with challenges left are offered.
+            .confirmationDialog("Whose challenge?", isPresented: $showTeamPicker, titleVisibility: .visible) {
+                if game.challengesRemaining(isHome: true) > 0 {
+                    Button(game.homeTeam?.name ?? "Home") { teamIsHome = true }
+                }
+                if game.challengesRemaining(isHome: false) > 0 {
+                    Button(game.awayTeam?.name ?? "Away") { teamIsHome = false }
+                }
+                Button("Cancel", role: .cancel) { }
+            }
+            // Step 2: result. Successful is retained; failed spends one.
+            .confirmationDialog("Challenge result?", isPresented: resultBinding, titleVisibility: .visible) {
+                Button("Successful — call overturned") { onRecord(true) }
+                Button("Failed — call stood") { onRecord(false) }
+                Button("Cancel", role: .cancel) { teamIsHome = nil }
+            } message: {
+                Text(message)
+            }
     }
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            Grid(horizontalSpacing: 12, verticalSpacing: 6) {
-                GridRow {
-                    Text("").gridColumnAlignment(.leading)
-                    ForEach(1...inningCount, id: \.self) { Text("\($0)").bold() }
-                    Text("R").bold(); Text("H").bold(); Text("E").bold()
-                }
-                row(isHome: false, name: game.awayTeam?.name ?? "Away",
-                    runs: game.awayInningRuns, total: game.awayScore, hits: game.hits(isHome: false))
-                row(isHome: true, name: game.homeTeam?.name ?? "Home",
-                    runs: game.homeInningRuns, total: game.homeScore, hits: game.hits(isHome: true))
-            }
-            .font(.subheadline.monospacedDigit())
-        }
+    /// Step 2 is presented whenever a team has been chosen.
+    private var resultBinding: Binding<Bool> {
+        Binding(get: { teamIsHome != nil }, set: { if !$0 { teamIsHome = nil } })
     }
 
-    private func row(isHome: Bool, name: String, runs: [Int], total: Int, hits: Int) -> some View {
-        GridRow {
-            Text(name).bold().lineLimit(1).gridColumnAlignment(.leading)
-            ForEach(0..<inningCount, id: \.self) { i in
-                if i < runs.count {
-                    Menu {
-                        Button("Add Run") { onAdjust(isHome, i, 1) }
-                        Button("Remove Run") { onAdjust(isHome, i, -1) }
-                    } label: {
-                        Text("\(runs[i])")
-                    }
-                } else {
-                    Text("")
-                }
-            }
-            Text("\(total)").bold()
-            Text("\(hits)")
-            Text("0") // errors not tracked yet
-        }
+    private var message: String {
+        guard let isHome = teamIsHome else { return "" }
+        let name = (isHome ? game.homeTeam?.name : game.awayTeam?.name) ?? (isHome ? "Home" : "Away")
+        return "Recording a challenge for \(name)."
     }
 }
 

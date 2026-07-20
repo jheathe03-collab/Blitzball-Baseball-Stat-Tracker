@@ -24,6 +24,12 @@ final class Team {
     /// The bundled logo asset this team uses (see TeamLogo). nil = no logo chosen.
     var logoName: String?
 
+    /// A custom imported photo used as the logo, stored as a small square thumbnail (see
+    /// TeamLogo.squareThumbnail). nil = no custom photo. Mutually exclusive with `logoName` in
+    /// practice (the picker clears one when the other is set); when both happen to be set, the
+    /// custom photo wins in `TeamLogoView`.
+    var logoImageData: Data?
+
     /// When the team was created (handy for sorting later).
     var dateAdded: Date
 
@@ -35,11 +41,13 @@ final class Team {
         name: String,
         league: String? = nil,
         logoName: String? = nil,
+        logoImageData: Data? = nil,
         dateAdded: Date = .now
     ) {
         self.name = name
         self.league = league
         self.logoName = logoName
+        self.logoImageData = logoImageData
         self.dateAdded = dateAdded
     }
 }

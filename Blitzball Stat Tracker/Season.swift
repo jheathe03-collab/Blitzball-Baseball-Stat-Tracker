@@ -32,7 +32,7 @@ final class Season {
     init(
         name: String = "",
         gamesPerSeason: Int = 7,
-        settings: GameSettings = .blitzballDefaults,
+        settings: GameSettings = .baseballDefaults,
         status: SeasonStatus = .setup,
         createdAt: Date = .now
     ) {
@@ -47,7 +47,7 @@ final class Season {
 extension Season {
     /// This season's rulebook, decoded from its blob. Setting re-encodes it.
     var settings: GameSettings {
-        get { BlobCoder.decode(settingsData) ?? .blitzballDefaults }
+        get { BlobCoder.decode(settingsData) ?? .baseballDefaults }
         set { settingsData = BlobCoder.encode(newValue) }
     }
 }

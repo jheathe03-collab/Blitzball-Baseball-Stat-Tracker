@@ -31,9 +31,9 @@ enum GameType: String, Codable, CaseIterable {
 struct GameSettings: Codable, Hashable, Sendable {
     var innings: Int          // 1...9
     var outsPerInning: Int    // how many outs end a half-inning (default 3)
-    var extraInnings: Bool
+    var extraInnings: Bool      // Extra Innings allows a game to extend even past tie-breaker
     var substitutions: Bool
-    var allTeamPitch: Bool
+    var allTeamPitch: Bool      // All players will be reminded to pitch, not a hard lock
     var maxStrikes: Int       // 1...10
     var maxBalls: Int         // 1...10
     var ghostRunners: Bool
@@ -60,7 +60,7 @@ struct GameSettings: Codable, Hashable, Sendable {
         designatedHitter: false
     )
     static let baseballDefaults = GameSettings(
-        innings: 9, outsPerInning: 3, extraInnings: true, substitutions: true, allTeamPitch: true,
+        innings: 9, outsPerInning: 3, extraInnings: true, substitutions: true, allTeamPitch: false,
         maxStrikes: 3, maxBalls: 4, ghostRunners: false, hbpWalks: true, challenges: 2,
         designatedHitter: false
     )

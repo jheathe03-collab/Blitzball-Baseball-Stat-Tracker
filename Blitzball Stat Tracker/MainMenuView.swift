@@ -40,11 +40,8 @@ struct MainMenuView: View {
                                      subtitle: "Track stats for a single game",
                                      systemImage: "baseball.fill")
                         }
-                        NavigationLink(destination: TournamentBracketView()) {
-                            MenuCard(title: "Tournament Bracket",
-                                     subtitle: "Run a tournament bracket",
-                                     systemImage: "trophy.fill")
-                        }
+                        // Tournament Bracket is not built yet — hidden until it's a real feature
+                        // (Apple rejects visible "coming soon" placeholders). Re-add when ready.
 
                         // Players + Teams as a side-by-side pair.
                         HStack(spacing: 16) {
@@ -81,11 +78,11 @@ struct MainMenuView: View {
 
     private var header: some View {
         VStack(spacing: 2) {
-            Text("Blitzball Stat Tracker")
+            Text("Stat Tracker")
                 .font(Theme.screenTitle)
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
-            Text("Main Menu")
+            Text("Welcome")
                 .font(Theme.screenSubtitle)
                 .foregroundStyle(.white.opacity(0.65))
         }

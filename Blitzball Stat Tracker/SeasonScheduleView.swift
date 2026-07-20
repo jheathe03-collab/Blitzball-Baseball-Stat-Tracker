@@ -47,11 +47,11 @@ struct SeasonScheduleView: View {
     private func matchupLabel(_ game: Game) -> some View {
         if let home = game.homeTeam, let away = game.awayTeam {
             HStack(spacing: 5) {
-                TeamLogoView(logoName: home.logoName, size: 20)
+                TeamLogoView(team: home, size: 20)
                 Text(home.name)
                 Text("vs").foregroundStyle(.secondary)
                 Text(away.name)
-                TeamLogoView(logoName: away.logoName, size: 20)
+                TeamLogoView(team: away, size: 20)
             }
             .lineLimit(1)
             .minimumScaleFactor(0.7)
@@ -118,7 +118,7 @@ struct WeekMatchupView: View {
                 picking = role
             } label: {
                 HStack {
-                    if let team { TeamLogoView(logoName: team.logoName, size: 24) }
+                    if let team { TeamLogoView(team: team, size: 24) }
                     Text(team?.name ?? "Select Team")
                         .foregroundStyle(team == nil ? Color.accentColor : .primary)
                     Spacer()

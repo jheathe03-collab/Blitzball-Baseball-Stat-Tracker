@@ -1,17 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "BlitzballNewCleanBG-removed.png",
+      "filename" : "OfficialStatTrackerLogo.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "BlitzballNewCleanBG-removed 1.png",
+      "filename" : "OfficialStatTrackerLogo 1.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "BlitzballNewCleanBG-removed 2.png",
+      "filename" : "OfficialStatTrackerLogo 2.png",
       "idiom" : "universal",
       "scale" : "3x"
     }

@@ -17,6 +17,7 @@ struct ResumeSeasonView: View {
     @Query(sort: \Season.createdAt, order: .reverse) private var seasons: [Season]
     @Environment(\.modelContext) private var modelContext
     @State private var seasonToDelete: Season?
+    @State private var showingImporter = false
 
     private var inProgress: [Season] {
         seasons.filter { $0.status == .inProgress }
@@ -28,16 +29,20 @@ struct ResumeSeasonView: View {
     }
 
     var body: some View {
-        Group {
+        List {
             if inProgress.isEmpty {
-                ContentUnavailableView {
-                    Label("No Seasons in Progress", systemImage: "play.slash.fill")
-                } description: {
-                    Text("Start a season from New Season, then come back here to play its games.")
+                Section {
+                    ContentUnavailableView {
+                        Label("No Seasons in Progress", systemImage: "play.slash.fill")
+                    } description: {
+                        Text("Start a season from New Season, or import one below to pick up where another device left off.")
+                    }
+                    .foregroundStyle(.white)
                 }
-                .foregroundStyle(.white)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             } else {
-                List {
+                Section {
                     ForEach(inProgress) { season in
                         NavigationLink(value: SeasonRoute.games(season)) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -58,9 +63,11 @@ struct ResumeSeasonView: View {
                     }
                     .blitzCardRow()
                 }
-                .blitzListStyle()
             }
+
+            importSection
         }
+        .blitzListStyle()
         .navigationTitle("Resume Season")
         .blitzballBackground()
         .navigationBarTitleDisplayMode(.inline)
@@ -70,6 +77,24 @@ struct ResumeSeasonView: View {
         } message: { season in
             Text(deleteMessage(for: season))
         }
+        .seasonImporter(isPresented: $showingImporter)
+    }
+
+    /// Import a season file — the routine after-every-game sync. Same flow as the Season hub, kept
+    /// here too since this is where you land to keep playing an in-progress season.
+    private var importSection: some View {
+        Section {
+            Button {
+                showingImporter = true
+            } label: {
+                Label("Import Season…", systemImage: "square.and.arrow.down")
+            }
+        } footer: {
+            Text("Just played on another device? Import the updated season file to sync it here (Season Stats → Export → Season File).")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.85))
+        }
+        .blitzCardRow()
     }
 
     /// Deleting a season cascades to its weekly games and their stat lines. Because career and

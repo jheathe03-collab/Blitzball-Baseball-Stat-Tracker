@@ -16,9 +16,16 @@ struct AddTeamView: View {
 
     @State private var name = ""
     @State private var logoName: String?
+    @State private var logoImageData: Data?
     @State private var showingLogoPicker = false
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+
+    /// Button caption: a custom photo has no name, so label it generically; otherwise the logo name.
+    private var logoLabel: String {
+        if logoImageData != nil { return "Custom Photo" }
+        return logoName.map(TeamLogo.displayName) ?? "Choose Logo"
+    }
 
     /// True when another team already has this name (case-insensitive).
     private var nameTaken: Bool {
@@ -38,8 +45,8 @@ struct AddTeamView: View {
                     showingLogoPicker = true
                 } label: {
                     HStack {
-                        TeamLogoView(logoName: logoName, size: 32)
-                        Text(logoName.map(TeamLogo.displayName) ?? "Choose Logo")
+                        TeamLogoView(logoName: logoName, imageData: logoImageData, size: 32)
+                        Text(logoLabel)
                             .foregroundStyle(.white)
                         Spacer()
                         Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.4))
@@ -59,7 +66,7 @@ struct AddTeamView: View {
             .navigationBarTitleDisplayMode(.inline)
             .blitzballBackground()
             .sheet(isPresented: $showingLogoPicker) {
-                TeamLogoPicker(logoName: $logoName)
+                TeamLogoPicker(logoName: $logoName, logoImageData: $logoImageData)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -75,7 +82,7 @@ struct AddTeamView: View {
 
     private func addTeam() {
         guard !trimmedName.isEmpty, !nameTaken else { return }
-        let team = Team(name: trimmedName, logoName: logoName)
+        let team = Team(name: trimmedName, logoName: logoName, logoImageData: logoImageData)
         modelContext.insert(team)
         dismiss()
     }

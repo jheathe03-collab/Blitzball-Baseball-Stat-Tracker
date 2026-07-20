@@ -9,7 +9,14 @@
 import SwiftUI
 
 enum Theme {
-    /// The brand background: deep navy at the top, easing through blue to a pale mint at the bottom.
+    /// The solid brand background. Replaces the old top-to-bottom gradient behind app screens: the
+    /// gradient faded to a pale mint at the bottom, which washed out white text (e.g. the Teams
+    /// "Game History" footer). A single on-brand navy keeps white readable everywhere. Tweak this
+    /// one value to recolor every screen at once.
+    static let brandBackground = Color(red: 0.19, green: 0.25, blue: 0.40)
+
+    /// The brand gradient — still used behind the splash screen. (App screens now use the solid
+    /// `brandBackground` above for readability.)
     static let brandGradient = LinearGradient(
         stops: [
             .init(color: Color(red: 0.16, green: 0.23, blue: 0.42), location: 0.00), // deep navy
@@ -43,14 +50,14 @@ extension View {
             .background(Theme.darkBackground.ignoresSafeArea())
     }
 
-    /// Puts the brand gradient (optionally with a faint centered logo watermark) behind a screen and
-    /// makes its List/Form/scroll content transparent so the gradient shows through.
+    /// Puts the solid brand background (optionally with a faint centered logo watermark) behind a
+    /// screen and makes its List/Form/scroll content transparent so the background shows through.
     func blitzballBackground(watermark: Bool = false) -> some View {
         self
             .scrollContentBackground(.hidden)
             .background {
                 ZStack {
-                    Theme.brandGradient
+                    Theme.brandBackground
                     if watermark {
                         Image("BlitzBalllogo")
                             .resizable()

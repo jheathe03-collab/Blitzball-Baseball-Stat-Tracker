@@ -82,6 +82,10 @@ private struct NewSeasonForm: View {
                             .font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
+            } footer: {
+                Text("Settings can always be changed before the start of each game.")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.85))
             }
             .blitzCardRow()
 

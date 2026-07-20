@@ -209,7 +209,7 @@ private struct WeekTeamCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                TeamLogoView(logoName: team?.logoName, size: 32)
+                TeamLogoView(team: team, size: 32)
                 Text(team?.name ?? "—")
                     .font(.title3).bold()
                 Spacer()

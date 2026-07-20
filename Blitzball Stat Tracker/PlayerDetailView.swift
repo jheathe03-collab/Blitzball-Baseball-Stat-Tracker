@@ -87,7 +87,9 @@ struct PlayerDetailView: View {
         Section(header: Text("Filter").foregroundStyle(.white)) {
             Picker("Mode", selection: $selectedMode) {
                 Text("All").tag(GameMode?.none)
-                ForEach(GameMode.allCases, id: \.self) { mode in
+                // Tournament isn't shipping in the initial release, so it's hidden here even
+                // though the GameMode case still exists (used internally, e.g. GameOptionsView).
+                ForEach(GameMode.allCases.filter { $0 != .tournament }, id: \.self) { mode in
                     Text(mode.displayName).tag(GameMode?.some(mode))
                 }
             }
