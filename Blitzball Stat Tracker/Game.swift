@@ -48,6 +48,14 @@ final class Game {
     var season: Season?
     var weekNumber: Int = 0
 
+    /// The tournament this game belongs to (when mode == .tournament), and its position in the
+    /// bracket. `bracketRound` is 0-based (0 = first round); `bracketSlot` is the match index within
+    /// that round. `manualTieWinnerIsHome` records the chosen winner when a tie is resolved by hand.
+    var tournament: Tournament?
+    var bracketRound: Int = 0
+    var bracketSlot: Int = 0
+    var manualTieWinnerIsHome: Bool? = nil
+
     /// The two sides. Optional to-one relationships: a game in setup may not have picked yet.
     /// These are unidirectional (no inverse on Team) because there are two links to the same
     /// type and we don't need to look a game up *from* a team yet. If a Team is deleted, these

@@ -2,25 +2,39 @@
 //  TeamPickerView.swift
 //  Blitzball Stat Tracker
 //
-//  A sheet for choosing a team. Reusable for both the Home and Away slots.
+//  A sheet for choosing a team. Two modes:
+//   • single-select (default) — tap a team → `onSelect` → dismiss (Home/Away slots, etc.)
+//   • multi-select — tap to toggle several teams, then Add → `onSelectMultiple` (tournament participants)
+//  Either way, swipe right on a team to edit it, and + to make a new one.
 //
 
 import SwiftUI
 import SwiftData
 
 struct TeamPickerView: View {
-    /// A team to leave out of the list (the one already chosen for the other slot), so the
-    /// same team can't be picked for both sides.
+    /// A team to leave out (e.g. the one already chosen for the other slot).
     let excluding: Team?
-    /// Called with the chosen team; the caller stores it and we dismiss.
-    let onSelect: (Team) -> Void
+    /// Additional teams to leave out (e.g. tournament participants already added).
+    var excludingTeams: [Team] = []
+    /// When true, the picker lets you select multiple teams and confirm with Add.
+    var allowsMultiple: Bool = false
+    /// Called with all selected teams (in the order tapped) when `allowsMultiple`.
+    var onSelectMultiple: ([Team]) -> Void = { _ in }
+    /// Called with the single chosen team (single-select mode).
+    var onSelect: (Team) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Team.name) private var teams: [Team]
     @State private var showingAddTeam = false
+    @State private var editingTeam: Team?
+    // Selection order preserved so multi-add seeds teams in the order you tapped them.
+    @State private var selectedOrder: [PersistentIdentifier] = []
 
     private var selectableTeams: [Team] {
-        teams.filter { $0 !== excluding }
+        teams.filter { team in team !== excluding && !excludingTeams.contains { $0 === team } }
+    }
+    private var selectedTeams: [Team] {
+        selectedOrder.compactMap { id in selectableTeams.first { $0.persistentModelID == id } }
     }
 
     var body: some View {
@@ -36,26 +50,20 @@ struct TeamPickerView: View {
                     }
                 } else {
                     List(selectableTeams) { team in
-                        Button {
-                            onSelect(team)
-                            dismiss()
-                        } label: {
-                            HStack {
-                                Text(team.name)
-                                    .foregroundStyle(.white)
-                                Spacer()
-                                Text("\(team.players.count) players")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.6))
+                        teamRow(team)
+                            .buttonStyle(.plain)
+                            .blitzCardRow()
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button { editingTeam = team } label: {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                .tint(.blue)
                             }
-                        }
-                        .buttonStyle(.plain)
-                        .blitzCardRow()
                     }
                     .blitzListStyle()
                 }
             }
-            .navigationTitle("Select Team")
+            .navigationTitle(allowsMultiple ? "Select Teams" : "Select Team")
             .blitzballBackground()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -67,10 +75,64 @@ struct TeamPickerView: View {
                         Label("New Team", systemImage: "plus")
                     }
                 }
+                if allowsMultiple {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(selectedOrder.isEmpty ? "Add" : "Add (\(selectedOrder.count))") {
+                            onSelectMultiple(selectedTeams)
+                            dismiss()
+                        }
+                        .disabled(selectedOrder.isEmpty)
+                    }
+                }
             }
             .sheet(isPresented: $showingAddTeam) {
                 AddTeamView()
             }
+            .navigationDestination(item: $editingTeam) { team in
+                TeamDetailView(team: team)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func teamRow(_ team: Team) -> some View {
+        if allowsMultiple {
+            let isSelected = selectedOrder.contains(team.persistentModelID)
+            Button { toggle(team) } label: {
+                HStack {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isSelected ? Color.accentColor : .white.opacity(0.4))
+                    Text(team.name).foregroundStyle(.white)
+                    Spacer()
+                    playerCount(team)
+                }
+            }
+        } else {
+            Button {
+                onSelect(team)
+                dismiss()
+            } label: {
+                HStack {
+                    Text(team.name).foregroundStyle(.white)
+                    Spacer()
+                    playerCount(team)
+                }
+            }
+        }
+    }
+
+    private func playerCount(_ team: Team) -> some View {
+        Text("\(team.players.count) player\(team.players.count == 1 ? "" : "s")")
+            .font(.subheadline)
+            .foregroundStyle(.white.opacity(0.6))
+    }
+
+    private func toggle(_ team: Team) {
+        let id = team.persistentModelID
+        if let index = selectedOrder.firstIndex(of: id) {
+            selectedOrder.remove(at: index)
+        } else {
+            selectedOrder.append(id)
         }
     }
 }

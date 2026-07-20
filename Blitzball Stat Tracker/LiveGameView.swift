@@ -12,6 +12,8 @@ import SwiftData
 
 struct LiveGameView: View {
     @Bindable var game: Game
+    /// Tournament matches pass this so the finished box score can return to the bracket.
+    var onExit: (() -> Void)? = nil
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -47,7 +49,7 @@ struct LiveGameView: View {
     var body: some View {
         // Once the game is over, this same screen becomes the box score.
         if game.status == .final {
-            GameSummaryView(game: game)
+            GameSummaryView(game: game, onBackToBracket: onExit)
         } else {
             liveContent
         }

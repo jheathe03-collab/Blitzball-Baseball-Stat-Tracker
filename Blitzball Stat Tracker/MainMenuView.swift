@@ -40,8 +40,11 @@ struct MainMenuView: View {
                                      subtitle: "Track stats for a single game",
                                      systemImage: "baseball.fill")
                         }
-                        // Tournament Bracket is not built yet — hidden until it's a real feature
-                        // (Apple rejects visible "coming soon" placeholders). Re-add when ready.
+                        NavigationLink(destination: TournamentModeView()) {
+                            MenuCard(title: "Tournament",
+                                     subtitle: "Run a single-elimination bracket",
+                                     systemImage: "trophy.fill")
+                        }
 
                         // Players + Teams as a side-by-side pair.
                         HStack(spacing: 16) {

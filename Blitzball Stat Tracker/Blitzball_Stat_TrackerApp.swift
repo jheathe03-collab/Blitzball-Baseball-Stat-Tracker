@@ -28,6 +28,7 @@ struct Blitzball_Stat_TrackerApp: App {
             Game.self,
             GameStatLine.self,
             Season.self,
+            Tournament.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

@@ -11,6 +11,9 @@ import SwiftData
 
 struct GameSummaryView: View {
     @Bindable var game: Game
+    /// When set (tournament matches), the final-screen button returns to the bracket instead of the
+    /// main menu, and winner advancement happens when the bracket reappears.
+    var onBackToBracket: (() -> Void)? = nil
     /// true = home team shown, false = away.
     @State private var showingHome = true
     @Environment(Router.self) private var router
@@ -64,16 +67,28 @@ struct GameSummaryView: View {
                     }
                 }
 
-                // After a game ends, offer a one-tap return to the menu.
+                // After a game ends, offer a one-tap return — to the bracket for a tournament match,
+                // otherwise to the main menu.
                 if game.status == .final {
-                    Button {
-                        router.returnToMainMenu()
-                    } label: {
-                        Label("Back to Main Menu", systemImage: "house.fill")
-                            .frame(maxWidth: .infinity)
+                    if let onBackToBracket {
+                        Button {
+                            onBackToBracket()
+                        } label: {
+                            Label("Back to Bracket", systemImage: "chevron.backward")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.top, 8)
+                    } else {
+                        Button {
+                            router.returnToMainMenu()
+                        } label: {
+                            Label("Back to Main Menu", systemImage: "house.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.top, 8)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .padding(.top, 8)
                 }
             }
             .padding()

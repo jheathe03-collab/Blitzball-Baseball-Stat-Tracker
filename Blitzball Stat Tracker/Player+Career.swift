@@ -86,6 +86,20 @@ extension Player {
         statLines(inSeason: season).reduce(PitchingStats()) { $0 + $1.pitching }
     }
 
+    // MARK: - Filtered by a specific Tournament
+
+    func statLines(inTournament tournament: Tournament) -> [GameStatLine] {
+        finalStatLines.filter { $0.game?.tournament === tournament }
+    }
+
+    func battingStats(inTournament tournament: Tournament) -> BattingStats {
+        statLines(inTournament: tournament).reduce(BattingStats()) { $0 + $1.batting }
+    }
+
+    func pitchingStats(inTournament tournament: Tournament) -> PitchingStats {
+        statLines(inTournament: tournament).reduce(PitchingStats()) { $0 + $1.pitching }
+    }
+
     // Note: team totals are computed on Team itself (see Team.battingTotals / pitchingTotals),
     // NOT by summing each player's career. Summing a player's career on the team side would
     // double-count anyone who ever played for another team. Don't add a "team career" helper here.
