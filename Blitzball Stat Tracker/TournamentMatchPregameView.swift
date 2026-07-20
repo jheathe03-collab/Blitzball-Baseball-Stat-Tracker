@@ -25,14 +25,7 @@ struct TournamentMatchPregameView: View {
     }
 
     private var roundLabel: String {
-        let total = game.tournament?.totalRounds ?? 0
-        let r = game.bracketRound
-        switch total - 1 - r {
-        case 0:  return "Final"
-        case 1:  return "Semifinal"
-        case 2:  return "Quarterfinal"
-        default: return "Round \(r + 1)"
-        }
+        game.tournament?.roundName(game.bracketRound) ?? "Round \(game.bracketRound + 1)"
     }
 
     private var pitcherWarningMessage: String {

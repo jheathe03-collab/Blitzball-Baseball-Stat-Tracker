@@ -105,9 +105,7 @@ struct TournamentParticipantsView: View {
     // Seed order is always rebuilt from the resolved `seeded` names — this also drops any stale
     // names (teams deleted since) so the list stays clean. New teams keep their tapped order.
     private func add(_ teams: [Team]) {
-        var names = seeded.map(\.name)
-        for team in teams where !names.contains(team.name) { names.append(team.name) }
-        tournament.seedOrder = names
+        tournament.appendSeeds(teams, currentlySeeded: seeded)
     }
 
     private func remove(at offsets: IndexSet) {

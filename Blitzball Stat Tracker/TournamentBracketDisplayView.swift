@@ -143,9 +143,7 @@ struct TournamentBracketDisplayView: View {
     }
 
     private func extend(with teams: [Team]) {
-        var names = seeded.map(\.name)
-        for team in teams where !names.contains(team.name) { names.append(team.name) }
-        tournament.seedOrder = names
+        tournament.appendSeeds(teams, currentlySeeded: seeded)
         onSeedingChanged()
     }
 

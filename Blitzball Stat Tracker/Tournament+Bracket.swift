@@ -34,6 +34,14 @@ extension Tournament {
         }
     }
 
+    /// Append teams to the seeding (skipping any already seeded), rebuilding from the resolved
+    /// current seeds so stale names are dropped. Shared by the participants + bracket screens.
+    func appendSeeds(_ teams: [Team], currentlySeeded seeded: [Team]) {
+        var names = seeded.map(\.name)
+        for team in teams where !names.contains(team.name) { names.append(team.name) }
+        seedOrder = names
+    }
+
     /// The match (if any) where this team lost.
     private func eliminationMatch(for team: Team) -> Game? {
         matches
@@ -92,7 +100,7 @@ extension Tournament {
     /// with only one team is a bye). Later rounds start empty and fill as winners advance. Unless the
     /// tournament decides ties by hand, matches force extra innings so there's always a winner.
     func generateMatches(seededTeams: [Team], context: ModelContext) {
-        for existing in matches { context.delete(existing) }
+        for existing in Array(matches) { context.delete(existing) }   // snapshot: delete mutates `matches`
 
         let bracket = BracketBuilder.build(seededTeamNames: seededTeams.map(\.name))
         guard !bracket.isEmpty else { return }

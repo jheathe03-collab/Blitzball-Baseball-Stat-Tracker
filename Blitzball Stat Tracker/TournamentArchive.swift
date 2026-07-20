@@ -53,6 +53,12 @@ struct TournamentArchive: Codable {
         var homePitcherOuts: Int
         var awayPitcherOuts: Int
 
+        // Challenge tallies. Optional so bracket files made before challenges existed still decode.
+        var homeChallengesUsed: Int?
+        var awayChallengesUsed: Int?
+        var homeChallengesWon: Int?
+        var awayChallengesWon: Int?
+
         var homeTeam: String?
         var awayTeam: String?
         var homePitcher: String?
@@ -144,6 +150,10 @@ extension TournamentArchive.MatchDTO {
         awayPitchingSwaps = g.awayPitchingSwaps
         homePitcherOuts = g.homePitcherOuts
         awayPitcherOuts = g.awayPitcherOuts
+        homeChallengesUsed = g.homeChallengesUsed
+        awayChallengesUsed = g.awayChallengesUsed
+        homeChallengesWon = g.homeChallengesWon
+        awayChallengesWon = g.awayChallengesWon
         homeTeam = g.homeTeam?.name
         awayTeam = g.awayTeam?.name
         homePitcher = g.homePitcher?.name
@@ -258,6 +268,10 @@ extension TournamentArchive {
             g.awayPitchingSwaps = dto.awayPitchingSwaps
             g.homePitcherOuts = dto.homePitcherOuts
             g.awayPitcherOuts = dto.awayPitcherOuts
+            g.homeChallengesUsed = dto.homeChallengesUsed ?? 0
+            g.awayChallengesUsed = dto.awayChallengesUsed ?? 0
+            g.homeChallengesWon = dto.homeChallengesWon ?? 0
+            g.awayChallengesWon = dto.awayChallengesWon ?? 0
             g.homePitcher = player(dto.homePitcher)
             g.awayPitcher = player(dto.awayPitcher)
             g.runnerFirst = player(dto.runnerFirst)
