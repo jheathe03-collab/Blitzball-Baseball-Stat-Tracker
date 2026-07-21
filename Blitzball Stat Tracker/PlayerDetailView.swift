@@ -56,6 +56,31 @@ struct PlayerDetailView: View {
         .sorted { $0.createdAt > $1.createdAt }
     }
 
+    // A small identity header: jersey number and batting stance, when set. Tap Edit to change them.
+    @ViewBuilder
+    private var profileSection: some View {
+        let stance = player.battingStance
+        if player.jerseyNumber != nil || (stance.map { !$0.isEmpty } ?? false) {
+            Section(header: Text("Player").foregroundStyle(.white)) {
+                if let number = player.jerseyNumber {
+                    HStack {
+                        Text("Number").foregroundStyle(.white)
+                        Spacer()
+                        Text("#\(number)").foregroundStyle(.secondary).monospacedDigit()
+                    }
+                }
+                if let stance, !stance.isEmpty {
+                    HStack {
+                        Text("Batting Stance").foregroundStyle(.white)
+                        Spacer()
+                        Text(stance).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .blitzCardRow()
+        }
+    }
+
     // Extracted from `body` to keep each view small enough for the Swift type-checker.
     @ViewBuilder
     private var gamesSection: some View {
@@ -128,6 +153,7 @@ struct PlayerDetailView: View {
         let ipText = "\(pitching.outsRecorded / 3).\(pitching.outsRecorded % 3)"
 
         return List {
+            profileSection
             filterSection
 
             Section(header: Text("Batting").foregroundStyle(.white)) {

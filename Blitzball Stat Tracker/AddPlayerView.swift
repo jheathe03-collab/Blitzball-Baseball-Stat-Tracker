@@ -23,7 +23,8 @@ struct AddPlayerView: View {
     // so even the jersey number starts life as text and we convert it when saving.
     @State private var name = ""
     @State private var jerseyText = ""
-
+    @State private var battingStance = ""
+    
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
 
     /// True when another player already has this name (case-insensitive). Two players with the
@@ -46,6 +47,9 @@ struct AddPlayerView: View {
                 TextField("", text: $jerseyText,
                           prompt: Text("Jersey number (optional)").foregroundStyle(.white.opacity(0.5)))
                     .keyboardType(.numberPad) // show the number keypad
+                    .blitzCardRow()
+                
+                BattingStanceField(stance: $battingStance)
                     .blitzCardRow()
 
                 if nameTaken {
@@ -78,7 +82,11 @@ struct AddPlayerView: View {
 
         // `Int(jerseyText)` returns nil if the text isn't a valid number — exactly the
         // optional we want for `jerseyNumber`.
-        let player = Player(name: trimmedName, jerseyNumber: Int(jerseyText))
+        let player = Player(
+            name: trimmedName,
+            jerseyNumber: Int(jerseyText),
+            battingStance: battingStance.isEmpty ? nil : battingStance
+        )
 
         // Insert into the database. The @Query in PlayersView notices and the new player
         // appears in the list instantly.

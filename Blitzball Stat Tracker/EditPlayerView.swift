@@ -18,11 +18,13 @@ struct EditPlayerView: View {
     // Local copies so Cancel discards changes; we only write back on Save.
     @State private var name: String
     @State private var jerseyText: String
+    @State private var battingStance: String
 
     init(player: Player) {
         self.player = player
         _name = State(initialValue: player.name)
         _jerseyText = State(initialValue: player.jerseyNumber.map(String.init) ?? "")
+        _battingStance = State(initialValue: player.battingStance ?? "")
     }
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
@@ -44,6 +46,9 @@ struct EditPlayerView: View {
                 TextField("", text: $jerseyText,
                           prompt: Text("Jersey number (optional)").foregroundStyle(.white.opacity(0.5)))
                     .keyboardType(.numberPad)
+                    .blitzCardRow()
+
+                BattingStanceField(stance: $battingStance)
                     .blitzCardRow()
 
                 if nameTaken {
@@ -72,6 +77,7 @@ struct EditPlayerView: View {
         guard !trimmedName.isEmpty, !nameTaken else { return }
         player.name = trimmedName
         player.jerseyNumber = Int(jerseyText)   // nil if blank/invalid — clears the number
+        player.battingStance = battingStance.isEmpty ? nil : battingStance
         dismiss()
     }
 }

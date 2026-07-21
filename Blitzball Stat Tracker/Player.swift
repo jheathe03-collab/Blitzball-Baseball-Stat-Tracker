@@ -19,6 +19,9 @@ final class Player {
     /// not have a number yet. This is a Swift *optional*.
     var jerseyNumber: Int?
 
+    /// Optional batting stance: "LH" or "RH".
+    var battingStance: String?
+
     // A player's career batting/pitching aren't stored — they're COMPUTED by summing this
     // player's finished-game stat lines (see Player+Career.swift). "Games are the source."
 
@@ -39,10 +42,12 @@ final class Player {
     init(
         name: String,
         jerseyNumber: Int? = nil,
+        battingStance: String? = nil,
         dateAdded: Date = .now
     ) {
         self.name = name
         self.jerseyNumber = jerseyNumber
+        self.battingStance = battingStance
         self.dateAdded = dateAdded
     }
 }

@@ -88,13 +88,13 @@ struct AddTeamView: View {
                 TeamLogoPicker(logoName: $logoName, logoImageData: $logoImageData)
             }
             .sheet(isPresented: $showingCreatePlayer) {
-                RosterCreatePlayerSheet(takenNames: takenPlayerNames) { newName, jersey in
-                    roster.append(RosterEntry(name: newName, jersey: jersey, existing: nil))
+                RosterCreatePlayerSheet(takenNames: takenPlayerNames) { newName, jersey, stance in
+                    roster.append(RosterEntry(name: newName, jersey: jersey, stance: stance, existing: nil))
                 }
             }
             .sheet(isPresented: $showingAddExisting) {
                 RosterExistingPlayerSheet(players: availableExisting) { player in
-                    roster.append(RosterEntry(name: player.name, jersey: player.jerseyNumber, existing: player))
+                    roster.append(RosterEntry(name: player.name, jersey: player.jerseyNumber, stance: player.battingStance, existing: player))
                 }
             }
             .toolbar {
@@ -118,6 +118,9 @@ struct AddTeamView: View {
                         Text("existing").font(.caption2).foregroundStyle(.white.opacity(0.4))
                     }
                     Spacer()
+                    if let stance = entry.stance {
+                        Text(stance).font(.caption2).foregroundStyle(.white.opacity(0.5))
+                    }
                     if let jersey = entry.jersey {
                         Text("#\(jersey)").foregroundStyle(.white.opacity(0.6))
                     }
@@ -149,7 +152,7 @@ struct AddTeamView: View {
             if let existing = entry.existing {
                 team.players.append(existing)
             } else {
-                let player = Player(name: entry.name, jerseyNumber: entry.jersey)
+                let player = Player(name: entry.name, jerseyNumber: entry.jersey, battingStance: entry.stance)
                 modelContext.insert(player)
                 team.players.append(player)
             }
@@ -163,6 +166,7 @@ private struct RosterEntry: Identifiable {
     let id = UUID()
     var name: String
     var jersey: Int?
+    var stance: String?
     var existing: Player?
 }
 
@@ -170,11 +174,15 @@ private struct RosterEntry: Identifiable {
 
 private struct RosterCreatePlayerSheet: View {
     let takenNames: Set<String>            // lowercased
-    let onCreate: (String, Int?) -> Void
+    let onCreate: (String, Int?, String?) -> Void
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
     @State private var jerseyText = ""
+    @State private var battingStance = ""
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case name, jersey }
 
     private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
     private var nameTaken: Bool { !trimmed.isEmpty && takenNames.contains(trimmed.lowercased()) }
@@ -184,10 +192,14 @@ private struct RosterCreatePlayerSheet: View {
             Form {
                 TextField("", text: $name,
                           prompt: Text("Name").foregroundStyle(.white.opacity(0.5)))
+                    .focused($focusedField, equals: .name)
                     .blitzCardRow()
                 TextField("", text: $jerseyText,
                           prompt: Text("Jersey number (optional)").foregroundStyle(.white.opacity(0.5)))
                     .keyboardType(.numberPad)
+                    .focused($focusedField, equals: .jersey)
+                    .blitzCardRow()
+                BattingStanceField(stance: $battingStance)
                     .blitzCardRow()
                 if nameTaken {
                     Text("A player named \u{201C}\(trimmed)\u{201D} already exists. Pick a different name.")
@@ -198,14 +210,19 @@ private struct RosterCreatePlayerSheet: View {
             .navigationTitle("New Player")
             .navigationBarTitleDisplayMode(.inline)
             .blitzballBackground()
+            .onChange(of: battingStance) { focusedField = nil }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
-                        onCreate(trimmed, Int(jerseyText))
+                        onCreate(trimmed, Int(jerseyText), battingStance.isEmpty ? nil : battingStance)
                         dismiss()
                     }
                     .disabled(trimmed.isEmpty || nameTaken)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
                 }
             }
         }
