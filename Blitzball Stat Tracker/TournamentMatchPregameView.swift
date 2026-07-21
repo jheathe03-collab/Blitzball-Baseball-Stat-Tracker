@@ -133,7 +133,7 @@ struct TournamentMatchPregameView: View {
 
         Section(isHome ? "Home" : "Away") {
             HStack {
-                TeamLogoView(logoName: team?.logoName, size: 32)
+                TeamLogoView(team: team, size: 32)
                 Text(team?.name ?? "—").font(.title3).bold()
                 Spacer()
                 Text("\(lineup.count) player\(lineup.count == 1 ? "" : "s")")

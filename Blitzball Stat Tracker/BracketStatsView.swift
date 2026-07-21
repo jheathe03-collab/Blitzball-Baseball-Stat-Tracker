@@ -95,7 +95,7 @@ struct BracketStatsDetailView: View {
                     if tournament.champion() === team {
                         Image(systemName: "trophy.fill").foregroundStyle(.yellow)
                     } else {
-                        TeamLogoView(logoName: team.logoName, size: 24)
+                        TeamLogoView(team: team, size: 24)
                     }
                     Text(team.name)
                     Spacer()

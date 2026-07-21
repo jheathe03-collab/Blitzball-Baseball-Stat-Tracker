@@ -29,7 +29,7 @@ struct TournamentParticipantsView: View {
                         HStack(spacing: 10) {
                             Text("\(index + 1).")
                                 .foregroundStyle(.white.opacity(0.5)).monospacedDigit()
-                            TeamLogoView(logoName: team.logoName, size: 24)
+                            TeamLogoView(team: team, size: 24)
                             Text(team.name).foregroundStyle(.white)
                             Spacer()
                         }

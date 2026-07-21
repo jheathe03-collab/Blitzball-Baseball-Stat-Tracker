@@ -83,7 +83,7 @@ struct TournamentBracketDisplayView: View {
     private func championBanner(_ team: Team) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "trophy.fill").foregroundStyle(.yellow)
-            TeamLogoView(logoName: team.logoName, size: 28)
+            TeamLogoView(team: team, size: 28)
             Text("\(team.name) — Champion!")
                 .font(.headline).foregroundStyle(.white)
         }
