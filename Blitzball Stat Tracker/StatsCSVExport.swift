@@ -19,7 +19,7 @@ enum StatsCSV {
          "AVG", "OBP", "SLG", "OPS"]
 
     private static let pitchingHeaders =
-        ["IP", "Outs", "H", "R", "ER", "HR", "BB", "SO", "BAA", "ERA", "WHIP", "K/BB", "SV", "QS"]
+        ["IP", "Outs", "H", "R", "ER", "HR", "BB", "SO", "SOL", "BAA", "ERA", "WHIP", "K/BB", "SV", "QS"]
 
     // MARK: - Public builders
 
@@ -154,6 +154,7 @@ enum StatsCSV {
         let kbb = p.strikeoutToWalkRatio.map { ratio($0) } ?? "—"
         return [ip(outs: p.outsRecorded), "\(p.outsRecorded)", "\(p.hitsAllowed)", "\(p.runsAllowed)",
                 "\(p.earnedRuns)", "\(p.homeRunsAllowed)", "\(p.walksAllowed)", "\(p.strikeouts)",
+                "\(p.strikeoutsLooking)",
                 rate(p.battingAverageAgainst), ratio(p.earnedRunAverage), ratio(p.walksAndHitsPerInning),
                 kbb, "\(p.saves)", "\(p.qualityStarts)"]
     }

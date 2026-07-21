@@ -174,7 +174,7 @@ private struct PitchingBox: View {
     let lines: [GameStatLine]
     var showTotals: Bool = true
 
-    private let headers = ["IP", "H", "R", "ER", "BB", "K", "HR", "ERA"]
+    private let headers = ["IP", "H", "R", "ER", "BB", "K", "Kʟ", "HR", "ERA"]
     private var totals: PitchingStats {
         lines.reduce(PitchingStats()) { $0 + $1.pitching }
     }
@@ -210,6 +210,7 @@ private struct PitchingBox: View {
             Text("\(p.earnedRuns)")
             Text("\(p.walksAllowed)")
             Text("\(p.strikeouts)")
+            Text("\(p.strikeoutsLooking)")
             Text("\(p.homeRunsAllowed)")
             Text(StatFormat.ratio(p.earnedRunAverage))
         }

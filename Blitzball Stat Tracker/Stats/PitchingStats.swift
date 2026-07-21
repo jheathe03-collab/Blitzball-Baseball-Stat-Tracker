@@ -26,6 +26,8 @@ public struct PitchingStats: Codable, Hashable, Sendable {
     public var walksAllowed: Int
     /// Strikeouts recorded.
     public var strikeouts: Int
+    /// Strikeouts LOOKING (called third strike) recorded by the pitcher — a subset of `strikeouts`.
+    public var strikeoutsLooking: Int
     /// At-bats against (used for Batting Average Against).
     public var atBatsAgainst: Int
     /// Saves recorded. A counting stat we track and total (not used by ERA/WHIP/etc.).
@@ -41,6 +43,7 @@ public struct PitchingStats: Codable, Hashable, Sendable {
         homeRunsAllowed: Int = 0,
         walksAllowed: Int = 0,
         strikeouts: Int = 0,
+        strikeoutsLooking: Int = 0,
         atBatsAgainst: Int = 0,
         saves: Int = 0,
         qualityStarts: Int = 0
@@ -52,6 +55,7 @@ public struct PitchingStats: Codable, Hashable, Sendable {
         self.homeRunsAllowed = homeRunsAllowed
         self.walksAllowed = walksAllowed
         self.strikeouts = strikeouts
+        self.strikeoutsLooking = strikeoutsLooking
         self.atBatsAgainst = atBatsAgainst
         self.saves = saves
         self.qualityStarts = qualityStarts
@@ -105,9 +109,37 @@ extension PitchingStats {
             homeRunsAllowed: lhs.homeRunsAllowed + rhs.homeRunsAllowed,
             walksAllowed: lhs.walksAllowed + rhs.walksAllowed,
             strikeouts: lhs.strikeouts + rhs.strikeouts,
+            strikeoutsLooking: lhs.strikeoutsLooking + rhs.strikeoutsLooking,
             atBatsAgainst: lhs.atBatsAgainst + rhs.atBatsAgainst,
             saves: lhs.saves + rhs.saves,
             qualityStarts: lhs.qualityStarts + rhs.qualityStarts
         )
+    }
+}
+
+// MARK: - Lenient decoding (this is what makes adding a stat data-safe)
+
+extension PitchingStats {
+    // Blobs saved before a stat existed lack its key. Decoding each field with `decodeIfPresent`
+    // (default 0) means old lines still load with all their real stats intact and any NEW stat at 0
+    // — instead of the decode failing and zeroing the whole line. Encoding stays auto-synthesized.
+    private enum CodingKeys: String, CodingKey {
+        case outsRecorded, earnedRuns, runsAllowed, hitsAllowed, homeRunsAllowed
+        case walksAllowed, strikeouts, strikeoutsLooking, atBatsAgainst, saves, qualityStarts
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        outsRecorded = try c.decodeIfPresent(Int.self, forKey: .outsRecorded) ?? 0
+        earnedRuns = try c.decodeIfPresent(Int.self, forKey: .earnedRuns) ?? 0
+        runsAllowed = try c.decodeIfPresent(Int.self, forKey: .runsAllowed) ?? 0
+        hitsAllowed = try c.decodeIfPresent(Int.self, forKey: .hitsAllowed) ?? 0
+        homeRunsAllowed = try c.decodeIfPresent(Int.self, forKey: .homeRunsAllowed) ?? 0
+        walksAllowed = try c.decodeIfPresent(Int.self, forKey: .walksAllowed) ?? 0
+        strikeouts = try c.decodeIfPresent(Int.self, forKey: .strikeouts) ?? 0
+        strikeoutsLooking = try c.decodeIfPresent(Int.self, forKey: .strikeoutsLooking) ?? 0
+        atBatsAgainst = try c.decodeIfPresent(Int.self, forKey: .atBatsAgainst) ?? 0
+        saves = try c.decodeIfPresent(Int.self, forKey: .saves) ?? 0
+        qualityStarts = try c.decodeIfPresent(Int.self, forKey: .qualityStarts) ?? 0
     }
 }

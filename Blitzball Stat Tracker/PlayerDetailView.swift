@@ -202,6 +202,7 @@ struct PlayerDetailView: View {
                 StatCell(label: "HR", value: "\(pitching.homeRunsAllowed)")
                 StatCell(label: "BB", value: "\(pitching.walksAllowed)")
                 StatCell(label: "K", value: "\(pitching.strikeouts)")
+                StatCell(label: "Kʟ", value: "\(pitching.strikeoutsLooking)")
                 StatCell(label: "SV", value: "\(pitching.saves)")
                 StatCell(label: "QS", value: "\(pitching.qualityStarts)")
             }

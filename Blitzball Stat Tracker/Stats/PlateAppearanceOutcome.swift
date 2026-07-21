@@ -79,7 +79,8 @@ extension PitchingStats {
         case .single, .double, .triple: hitsAllowed += 1
         case .homeRun:                  hitsAllowed += 1; homeRunsAllowed += 1
         case .walk:                     walksAllowed += 1
-        case .strikeout, .strikeoutLooking: strikeouts += 1
+        case .strikeout:                strikeouts += 1
+        case .strikeoutLooking:         strikeouts += 1; strikeoutsLooking += 1
         case .out, .hitByPitch:         break
         }
     }
