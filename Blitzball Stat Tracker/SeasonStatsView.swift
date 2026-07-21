@@ -67,6 +67,7 @@ struct SeasonStatsDetailView: View {
             standingsSection
             battingSection
             pitchingSection
+            gameHistorySection
         }
         .navigationTitle(season.name.isEmpty ? "Season" : season.name)
         .blitzballBackground()
@@ -222,6 +223,36 @@ struct SeasonStatsDetailView: View {
 
     private func inningsPitched(_ stats: PitchingStats) -> String {
         "\(stats.outsRecorded / 3).\(stats.outsRecorded % 3)"
+    }
+
+    // MARK: Game History
+
+    @ViewBuilder
+    private var gameHistorySection: some View {
+        if !playedGames.isEmpty {
+            Section {
+                ForEach(playedGames, id: \.persistentModelID) { game in
+                    NavigationLink {
+                        GameSummaryView(game: game)
+                    } label: {
+                        GameHistoryRow(game: game)
+                    }
+                }
+            } header: {
+                Text("Game History").foregroundStyle(.white)
+            } footer: {
+                Text("Tap a game to see its box score.")
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .blitzCardRow()
+        }
+    }
+
+    /// This season's played games (in-progress or final; unplayed weeks excluded), latest week first.
+    private var playedGames: [Game] {
+        season.games
+            .filter { $0.status != .setup }
+            .sorted { $0.weekNumber > $1.weekNumber }
     }
 
     // MARK: Participants
