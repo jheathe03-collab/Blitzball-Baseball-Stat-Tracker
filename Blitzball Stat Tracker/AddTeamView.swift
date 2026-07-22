@@ -19,12 +19,19 @@ struct AddTeamView: View {
     @State private var name = ""
     @State private var logoName: String?
     @State private var logoImageData: Data?
-    @State private var showingLogoPicker = false
 
     // Roster being assembled locally (not inserted until Add).
     @State private var roster: [RosterEntry] = []
-    @State private var showingCreatePlayer = false
-    @State private var showingAddExisting = false
+
+    // A SINGLE sheet slot for all three sub-screens. SwiftUI only reliably supports one `.sheet`
+    // per view; stacking several booleans could dismiss this whole form mid-entry (the "auto
+    // cancel" bug). One `item:`-driven sheet fixes that.
+    @State private var activeSheet: ActiveSheet?
+
+    private enum ActiveSheet: Identifiable {
+        case logo, createPlayer, addExisting
+        var id: Self { self }
+    }
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
 
@@ -61,7 +68,7 @@ struct AddTeamView: View {
                     .blitzCardRow()
 
                 Button {
-                    showingLogoPicker = true
+                    activeSheet = .logo
                 } label: {
                     HStack {
                         TeamLogoView(logoName: logoName, imageData: logoImageData, size: 32)
@@ -84,17 +91,18 @@ struct AddTeamView: View {
             .navigationTitle("New Team")
             .navigationBarTitleDisplayMode(.inline)
             .blitzballBackground()
-            .sheet(isPresented: $showingLogoPicker) {
-                TeamLogoPicker(logoName: $logoName, logoImageData: $logoImageData)
-            }
-            .sheet(isPresented: $showingCreatePlayer) {
-                RosterCreatePlayerSheet(takenNames: takenPlayerNames) { newName, jersey, stance in
-                    roster.append(RosterEntry(name: newName, jersey: jersey, stance: stance, existing: nil))
-                }
-            }
-            .sheet(isPresented: $showingAddExisting) {
-                RosterExistingPlayerSheet(players: availableExisting) { player in
-                    roster.append(RosterEntry(name: player.name, jersey: player.jerseyNumber, stance: player.battingStance, existing: player))
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .logo:
+                    TeamLogoPicker(logoName: $logoName, logoImageData: $logoImageData)
+                case .createPlayer:
+                    RosterCreatePlayerSheet(takenNames: takenPlayerNames) { newName, jersey, stance in
+                        roster.append(RosterEntry(name: newName, jersey: jersey, stance: stance, existing: nil))
+                    }
+                case .addExisting:
+                    RosterExistingPlayerSheet(players: availableExisting) { player in
+                        roster.append(RosterEntry(name: player.name, jersey: player.jerseyNumber, stance: player.battingStance, existing: player))
+                    }
                 }
             }
             .toolbar {
@@ -128,10 +136,10 @@ struct AddTeamView: View {
             }
             .onDelete { roster.remove(atOffsets: $0) }
 
-            Button { showingCreatePlayer = true } label: {
+            Button { activeSheet = .createPlayer } label: {
                 Label("Create a New Player", systemImage: "plus.circle")
             }
-            Button { showingAddExisting = true } label: {
+            Button { activeSheet = .addExisting } label: {
                 Label("Add an Existing Player", systemImage: "person.badge.plus")
             }
             .disabled(availableExisting.isEmpty)

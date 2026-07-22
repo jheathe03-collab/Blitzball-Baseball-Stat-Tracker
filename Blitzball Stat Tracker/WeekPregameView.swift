@@ -107,7 +107,7 @@ struct WeekPregameView: View {
                 .disabled(!ready)
             } footer: {
                 if !ready {
-                    Text("Both teams need at least one player. Add players from a team's Edit Roster on the schedule screen.")
+                    Text("Both teams need at least one player. Use Edit Roster above to add players.")
                 }
             }
         }
@@ -144,6 +144,16 @@ struct WeekPregameView: View {
 
         Section(isHome ? "Home" : "Away") {
             WeekTeamCard(team: team, record: record(for: team), lineup: lineup)
+
+            // Add/remove players for game day without leaving this screen. The lineup refreshes
+            // via syncLineups() when we return (see .onAppear).
+            if let team {
+                NavigationLink {
+                    TeamDetailView(team: team)
+                } label: {
+                    Label("Edit Roster", systemImage: "square.and.pencil")
+                }
+            }
 
             NavigationLink {
                 BattingOrderView(game: game, isHome: isHome)
