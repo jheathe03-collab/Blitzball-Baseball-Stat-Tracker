@@ -765,7 +765,14 @@ private struct BatterCounters: View {
             StatStepper(label: "Hits", value: $line.batting.hits)
             StatStepper(label: "HR", value: $line.batting.homeRuns)
             StatStepper(label: "Walks", value: $line.batting.walks)
-            StatStepper(label: "Strikeouts", value: $line.batting.strikeouts)
+            // Clamp Strikeouts to be ≥ strikeoutsLooking (Kʟ is a subset of K by definition).
+            // Without the clamp, decrementing below Kʟ silently corrupts data: aggregations start
+            // reporting Kʟ > K, which is impossible, and any consumer that computes "swinging Ks
+            // = strikeouts - strikeoutsLooking" produces a negative number.
+            StatStepper(label: "Strikeouts", value: Binding(
+                get: { line.batting.strikeouts },
+                set: { line.batting.strikeouts = max($0, line.batting.strikeoutsLooking) }
+            ))
         }
     }
 }
@@ -780,7 +787,11 @@ private struct PitcherCounters: View {
             StatStepper(label: "Hits", value: $line.pitching.hitsAllowed)
             StatStepper(label: "HR", value: $line.pitching.homeRunsAllowed)
             StatStepper(label: "Walks", value: $line.pitching.walksAllowed)
-            StatStepper(label: "Strikeouts", value: $line.pitching.strikeouts)
+            // Clamp Strikeouts to be ≥ strikeoutsLooking (same invariant as the batter side).
+            StatStepper(label: "Strikeouts", value: Binding(
+                get: { line.pitching.strikeouts },
+                set: { line.pitching.strikeouts = max($0, line.pitching.strikeoutsLooking) }
+            ))
             // In-play outs (outs that aren't strikeouts). Editing keeps total outs = Outs + K.
             StatStepper(label: "Outs", value: Binding(
                 get: { line.pitching.outsRecorded - line.pitching.strikeouts },

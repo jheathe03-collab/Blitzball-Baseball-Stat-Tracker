@@ -23,19 +23,30 @@ struct GameHistoryRow: View {
         }
     }
 
-    /// "Exhibition · Jul 17, 2026" (or the season name for season games), plus "· In progress"
-    /// while a game isn't final yet.
+    /// "Exhibition · Jul 17, 2026" (or the season name for season games), plus " · Setup" or
+    /// " · In progress" while a game isn't final yet.
     static func subtitle(_ game: Game) -> String {
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        let date = df.string(from: game.createdAt)
         let kind: String
         switch game.mode {
         case .exhibition: kind = "Exhibition"
         case .season:     kind = (game.season?.name).flatMap { $0.isEmpty ? nil : $0 } ?? "Season"
         case .tournament: kind = "Tournament"
         }
-        let status = game.status == .final ? "" : " · In progress"
-        return "\(kind) · \(date)\(status)"
+        let status: String
+        switch game.status {
+        case .final:      status = ""
+        case .setup:      status = " · Setup"
+        case .inProgress: status = " · In progress"
+        }
+        return "\(kind) · \(Self.dateFormatter.string(from: game.createdAt))\(status)"
     }
+
+    // Hoist the DateFormatter out of subtitle() — configuring one is expensive, and this method
+    // is called once per row per render (Season Game History, Player games list). DateFormatter
+    // is thread-safe once configured, so a `static let` is fine.
+    private static let dateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        return df
+    }()
 }

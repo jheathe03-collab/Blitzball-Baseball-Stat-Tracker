@@ -107,7 +107,8 @@ extension TournamentArchive {
         }
 
         players = playerList.map {
-            SeasonArchive.PlayerDTO(name: $0.name, jerseyNumber: $0.jerseyNumber, dateAdded: $0.dateAdded)
+            SeasonArchive.PlayerDTO(name: $0.name, jerseyNumber: $0.jerseyNumber,
+                                    dateAdded: $0.dateAdded, battingStance: $0.battingStance)
         }
         teams = teamList.map {
             SeasonArchive.TeamDTO(name: $0.name, logoName: $0.logoName, league: $0.league,
@@ -203,21 +204,32 @@ extension TournamentArchive {
                existing: Tournament?,
                context: ModelContext) -> (tournament: Tournament, players: Int, matches: Int) {
 
-        // Players — reuse by name or create.
+        // Players — reuse by name (case-insensitive) on this device, or create.
+        //
+        // The map is keyed by the DTO's ORIGINAL name (case-preserving), not lowercased. If the
+        // archive legitimately contains two distinct players whose names differ only by case
+        // (e.g. `mike` and `Mike`), each DTO gets its own map entry and its own destination
+        // Player — the old lowercased key would have silently collapsed them, redirecting every
+        // stat line and roster reference for one onto the other. Mirrors SeasonArchive.apply.
         let existingPlayers = (try? context.fetch(FetchDescriptor<Player>())) ?? []
         var playerMap: [String: Player] = [:]
         for dto in players {
-            let key = dto.name.lowercased()
             if let match = existingPlayers.first(where: { $0.name.caseInsensitiveCompare(dto.name) == .orderedSame }) {
-                playerMap[key] = match
+                // Two DTOs that only differ in case can BOTH resolve to the same existing player
+                // here — that's the right merge behavior (this device already knows them as one).
+                if match.battingStance == nil { match.battingStance = dto.battingStance }
+                playerMap[dto.name] = match
             } else {
-                let p = Player(name: dto.name, jerseyNumber: dto.jerseyNumber, dateAdded: dto.dateAdded)
-                context.insert(p); playerMap[key] = p
+                let p = Player(name: dto.name, jerseyNumber: dto.jerseyNumber,
+                               battingStance: dto.battingStance, dateAdded: dto.dateAdded)
+                context.insert(p); playerMap[dto.name] = p
             }
         }
-        func player(_ name: String?) -> Player? { name.flatMap { playerMap[$0.lowercased()] } }
+        // Roster / stat-line / pitcher / runner / DH references were all serialized from the same
+        // `player.name` string, so exact-case lookup routes distinct-case DTOs correctly.
+        func player(_ name: String?) -> Player? { name.flatMap { playerMap[$0] } }
 
-        // Teams — reuse by name or create; append roster (never remove/overwrite).
+        // Teams — same case-preserving map + exact-case lookup story as players.
         let existingTeams = (try? context.fetch(FetchDescriptor<Team>())) ?? []
         var teamMap: [String: Team] = [:]
         for dto in teams {
@@ -231,9 +243,9 @@ extension TournamentArchive {
             for name in dto.roster {
                 if let p = player(name), !team.players.contains(where: { $0 === p }) { team.players.append(p) }
             }
-            teamMap[dto.name.lowercased()] = team
+            teamMap[dto.name] = team
         }
-        func team(_ name: String?) -> Team? { name.flatMap { teamMap[$0.lowercased()] } }
+        func team(_ name: String?) -> Team? { name.flatMap { teamMap[$0] } }
 
         if resolution == .replace, let existing { context.delete(existing) }
 

@@ -125,11 +125,14 @@ private struct BattingBox: View {
     var showTotals: Bool = true
 
     private let headers = ["AB", "R", "H", "RBI", "BB", "K", "SB", "AVG", "OPS"]
-    private var totals: BattingStats {
-        lines.reduce(BattingStats()) { $0 + $1.batting }
-    }
 
     var body: some View {
+        // Decode each line's batting blob ONCE per render, then use the cached values for BOTH
+        // the per-row cells and the TEAM totals reduce. The previous shape decoded each blob
+        // twice — once via `line.batting` in the ForEach and once via `$1.batting` in `totals`.
+        let cached = lines.map { $0.batting }
+        let totals = cached.reduce(BattingStats(), +)
+
         ScrollView(.horizontal, showsIndicators: false) {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
                 GridRow {
@@ -138,8 +141,8 @@ private struct BattingBox: View {
                 }
                 Divider().gridCellColumns(headers.count + 1)
 
-                ForEach(lines) { line in
-                    row(name: line.player?.name ?? "—", b: line.batting, bold: false)
+                ForEach(Array(lines.enumerated()), id: \.element.persistentModelID) { i, line in
+                    row(name: line.player?.name ?? "—", b: cached[i], bold: false)
                 }
 
                 if showTotals && !lines.isEmpty {
@@ -175,11 +178,12 @@ private struct PitchingBox: View {
     var showTotals: Bool = true
 
     private let headers = ["IP", "H", "R", "ER", "BB", "K", "Kʟ", "HR", "ERA"]
-    private var totals: PitchingStats {
-        lines.reduce(PitchingStats()) { $0 + $1.pitching }
-    }
 
     var body: some View {
+        // Same one-decode-per-line strategy as BattingBox — see the note there.
+        let cached = lines.map { $0.pitching }
+        let totals = cached.reduce(PitchingStats(), +)
+
         ScrollView(.horizontal, showsIndicators: false) {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
                 GridRow {
@@ -188,8 +192,8 @@ private struct PitchingBox: View {
                 }
                 Divider().gridCellColumns(headers.count + 1)
 
-                ForEach(lines) { line in
-                    row(name: line.player?.name ?? "—", p: line.pitching, bold: false)
+                ForEach(Array(lines.enumerated()), id: \.element.persistentModelID) { i, line in
+                    row(name: line.player?.name ?? "—", p: cached[i], bold: false)
                 }
 
                 if showTotals && !lines.isEmpty {

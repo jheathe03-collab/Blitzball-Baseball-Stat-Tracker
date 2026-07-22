@@ -147,13 +147,7 @@ struct WeekPregameView: View {
 
             // Add/remove players for game day without leaving this screen. The lineup refreshes
             // via syncLineups() when we return (see .onAppear).
-            if let team {
-                NavigationLink {
-                    TeamDetailView(team: team)
-                } label: {
-                    Label("Edit Roster", systemImage: "square.and.pencil")
-                }
-            }
+            EditRosterLink(team: team)
 
             NavigationLink {
                 BattingOrderView(game: game, isHome: isHome)

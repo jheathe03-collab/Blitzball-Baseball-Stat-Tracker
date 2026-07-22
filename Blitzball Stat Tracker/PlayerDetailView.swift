@@ -87,7 +87,7 @@ struct PlayerDetailView: View {
         if !playerGames.isEmpty {
             Section {
                 ForEach(playerGames, id: \.persistentModelID) { game in
-                    gameRow(game)
+                    GameHistoryRow(game: game)
                         .swipeActions(edge: .trailing) {
                             if game.season == nil {
                                 Button(role: .destructive) { gameToDelete = game } label: {
@@ -289,30 +289,8 @@ struct PlayerDetailView: View {
         Binding(get: { gameToDelete != nil }, set: { if !$0 { gameToDelete = nil } })
     }
 
-    private func gameRow(_ game: Game) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("\(game.homeTeam?.name ?? "Home") \(game.homeScore)–\(game.awayScore) \(game.awayTeam?.name ?? "Away")")
-                .font(.subheadline)
-                .foregroundStyle(.white)
-            Text(gameSubtitle(game))
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
-        }
-    }
-
-    private func gameSubtitle(_ game: Game) -> String {
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        let date = df.string(from: game.createdAt)
-        let kind: String
-        switch game.mode {
-        case .exhibition: kind = "Exhibition"
-        case .season:     kind = (game.season?.name).flatMap { $0.isEmpty ? nil : $0 } ?? "Season"
-        case .tournament: kind = "Tournament"
-        }
-        let status = game.status == .final ? "" : (game.status == .setup ? " · Setup" : " · In progress")
-        return "\(kind) · \(date)\(status)"
-    }
+    // Game row rendering lives on GameHistoryRow so this screen, Season Stats' Game History, and
+    // any future "games list" all format identically. Don't reintroduce a local gameRow helper.
 }
 
 /// A shareable file wrapper (Identifiable so it can drive `.sheet(item:)`).

@@ -43,6 +43,10 @@ struct SeasonArchive: Codable {
         var name: String
         var jerseyNumber: Int?
         var dateAdded: Date
+        // Optional so archives from builds before `battingStance` existed still decode cleanly
+        // (Swift's synthesized Codable uses decodeIfPresent for Optional fields). Default keeps
+        // the memberwise init source-compatible with older call sites.
+        var battingStance: String? = nil
     }
 
     struct TeamDTO: Codable {
@@ -167,7 +171,8 @@ extension SeasonArchive {
         }
 
         players = playerList.map {
-            PlayerDTO(name: $0.name, jerseyNumber: $0.jerseyNumber, dateAdded: $0.dateAdded)
+            PlayerDTO(name: $0.name, jerseyNumber: $0.jerseyNumber, dateAdded: $0.dateAdded,
+                      battingStance: $0.battingStance)
         }
         teams = teamList.map {
             TeamDTO(name: $0.name, logoName: $0.logoName, logoImageData: $0.logoImageData,
@@ -308,9 +313,13 @@ extension SeasonArchive {
             if let existing = existingPlayers.first(where: { $0.name.caseInsensitiveCompare(dto.name) == .orderedSame }) {
                 // Two DTOs that only differ in case can BOTH resolve to the same existing player
                 // here — that's the right merge behavior (this device already knows them as one).
+                // Non-destructively backfill missing profile fields from the archive (matches how
+                // PlayerArchive.apply merges — never overwrites what the device already has).
+                if existing.battingStance == nil { existing.battingStance = dto.battingStance }
                 playerMap[dto.name] = existing
             } else {
-                let p = Player(name: dto.name, jerseyNumber: dto.jerseyNumber, dateAdded: dto.dateAdded)
+                let p = Player(name: dto.name, jerseyNumber: dto.jerseyNumber,
+                               battingStance: dto.battingStance, dateAdded: dto.dateAdded)
                 context.insert(p)
                 playerMap[dto.name] = p
             }

@@ -142,13 +142,7 @@ struct TournamentMatchPregameView: View {
 
             // Add/remove players for this match without leaving the bracket. The lineup refreshes
             // via syncLineups() when we return (see .onAppear).
-            if let team {
-                NavigationLink {
-                    TeamDetailView(team: team)
-                } label: {
-                    Label("Edit Roster", systemImage: "square.and.pencil")
-                }
-            }
+            EditRosterLink(team: team)
 
             NavigationLink {
                 BattingOrderView(game: game, isHome: isHome)
