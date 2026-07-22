@@ -174,9 +174,9 @@ struct LiveGameView: View {
         } message: {
             Text(gameOverMessage + "\n\nEnd the game, or edit the line score if you need to make corrections.")
         }
-        .alert("Runner Scored?", isPresented: scoringPromptBinding, presenting: currentScoringPrompt) { _ in
-            Button("Yes, Scored") { answerHitPrompt(scored: true) }
-            Button("No", role: .cancel) { answerHitPrompt(scored: false) }
+        .alert(scoringAlertTitle, isPresented: scoringPromptBinding, presenting: currentScoringPrompt) { prompt in
+            Button(prompt.targetBase >= 3 ? "Yes, Scored" : "Yes") { answerHitPrompt(advanced: true) }
+            Button("No", role: .cancel) { answerHitPrompt(advanced: false) }
         } message: { prompt in
             Text(prompt.message)
         }
@@ -288,12 +288,14 @@ struct LiveGameView: View {
         while res.index < res.runners.count {
             let (startBase, player) = res.runners[res.index]
             let desired = min(startBase + res.baseCount, 3)   // 3 == home
+            // Forced = every base behind this runner (back toward the batter) is occupied, so they
+            // have no choice but to advance. A non-forced advance is the runner's decision → we ask.
+            let forced = (0..<startBase).allSatisfy { res.occupied.contains($0) }
+
             if desired >= 3 && res.ahead >= 3 {
                 // A true walk-in — a single with every base behind loaded — is forced home with no
-                // choice, so score it silently. Doubles/triples (and un-loaded singles) are the
-                // runner's decision, so we ask.
-                let forcedWalkIn = res.baseCount == 1 && (0..<startBase).allSatisfy { res.occupied.contains($0) }
-                if forcedWalkIn {
+                // choice, so score it silently. Otherwise it's the runner's call, so we ask.
+                if res.baseCount == 1 && forced {
                     game.scorePendingRunner(player, rbiTo: game.previousBatterLine)
                     res.ahead = 3
                     res.index += 1
@@ -304,13 +306,28 @@ struct LiveGameView: View {
                 let name = player.name, noun = res.hitNoun
                 DispatchQueue.main.async {   // let any prior alert fully dismiss before re-presenting
                     currentScoringPrompt = ScoringPrompt(player: player,
-                                                         message: "Did \(name) score on the \(noun)?")
+                                                         message: "Did \(name) score on the \(noun)?",
+                                                         targetBase: 3)
                 }
                 return
             }
-            // A mover (or a would-be scorer blocked by someone holding ahead): advance as far as the
-            // runner in front allows.
+
+            // A non-home advance, as far as the runner in front allows.
             let target = min(desired, res.ahead - 1)
+            // Not forced, but a base is there for the taking (e.g. a runner on 2nd going to third on
+            // a single with first base open) → it's discretionary, so ask instead of auto-advancing.
+            if !forced && target > startBase {
+                resolution = res
+                let name = player.name, base = baseLabel(target)
+                DispatchQueue.main.async {   // let any prior alert fully dismiss before re-presenting
+                    currentScoringPrompt = ScoringPrompt(player: player,
+                                                         message: "Did \(name) take \(base)?",
+                                                         targetBase: target)
+                }
+                return
+            }
+
+            // Forced (or nowhere further to go) → advance automatically.
             if target >= 0 { game.setRunner(player, onBase: target); res.ahead = target }
             res.index += 1
         }
@@ -321,17 +338,29 @@ struct LiveGameView: View {
         finishPlay()
     }
 
-    private func answerHitPrompt(scored: Bool) {
-        guard var res = resolution else { return }
-        let player = res.runners[res.index].player
-        if scored {
-            game.scorePendingRunner(player, rbiTo: game.previousBatterLine)  // RBI → the hitter
-            res.ahead = 3   // he's home; runners behind can still advance up to third
-        } else {
-            // He held short of home — third if open, otherwise one base back so nobody stacks.
+    private func answerHitPrompt(advanced: Bool) {
+        guard var res = resolution, let prompt = currentScoringPrompt else { return }
+        let (startBase, player) = res.runners[res.index]
+        let isScore = prompt.targetBase >= 3
+
+        if advanced {
+            if isScore {
+                game.scorePendingRunner(player, rbiTo: game.previousBatterLine)  // RBI → the hitter
+                res.ahead = 3   // he's home; runners behind can still advance up to third
+            } else {
+                game.setRunner(player, onBase: prompt.targetBase)
+                res.ahead = prompt.targetBase
+            }
+        } else if isScore {
+            // Held short of home — third if open, otherwise one base back so nobody stacks.
             let target = min(2, res.ahead - 1)
             if target >= 0 { game.setRunner(player, onBase: target); res.ahead = target }
+        } else {
+            // Declined the extra base — holds where he started (you can nudge him further by hand).
+            game.setRunner(player, onBase: startBase)
+            res.ahead = startBase
         }
+
         res.index += 1
         resolution = res
         currentScoringPrompt = nil
@@ -340,6 +369,21 @@ struct LiveGameView: View {
 
     private var scoringPromptBinding: Binding<Bool> {
         Binding(get: { currentScoringPrompt != nil }, set: { if !$0 { currentScoringPrompt = nil } })
+    }
+
+    /// The alert title adapts to the kind of decision: scoring at home vs. taking an extra base.
+    private var scoringAlertTitle: String {
+        (currentScoringPrompt?.targetBase ?? 3) >= 3 ? "Runner Scored?" : "Runner Advanced?"
+    }
+
+    /// Spoken name for a base index, for the discretionary-advance prompt ("Did … take third?").
+    private func baseLabel(_ base: Int) -> String {
+        switch base {
+        case 0:  return "first"
+        case 1:  return "second"
+        case 2:  return "third"
+        default: return "home"
+        }
     }
 
     /// After a play fully resolves, surface the Game Over popup if the innings rule ended it.
@@ -589,11 +633,13 @@ private struct RunToScore: Identifiable {
     let base: Int
 }
 
-// The "did this runner score?" prompt currently on screen (ghost-OFF station-to-station flow).
+// A baserunning decision prompt currently on screen (ghost-OFF station-to-station flow): either
+// "did this runner score?" (targetBase 3) or "did this runner take an extra, non-forced base?".
 private struct ScoringPrompt: Identifiable {
     let id = UUID()
     let player: Player
     let message: String
+    let targetBase: Int   // 3 = home (a run); otherwise the base index they'd advance to
 }
 
 /// In-progress state for resolving a ghost-OFF hit one runner at a time. Runners are ordered
