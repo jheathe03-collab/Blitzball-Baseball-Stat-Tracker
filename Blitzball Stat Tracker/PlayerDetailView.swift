@@ -15,6 +15,7 @@ struct PlayerDetailView: View {
     @Bindable var player: Player
     @State private var showingEdit = false
     @State private var showingCard = false
+    @State private var confirmingPhotoExport = false
     // Stat filters (nil = "All"). Tournament games don't exist yet, so Tournament shows 0s for now.
     @State private var selectedMode: GameMode?
     @State private var selectedYear: Int?
@@ -226,7 +227,7 @@ struct PlayerDetailView: View {
                     Button { showingEdit = true } label: {
                         Label("Edit Player", systemImage: "pencil")
                     }
-                    Button(action: exportStats) {
+                    Button(action: beginExport) {
                         Label("Export Stats…", systemImage: "square.and.arrow.up")
                     }
                     // Nothing to export until the player has finished-game history.
@@ -241,6 +242,13 @@ struct PlayerDetailView: View {
         }
         .fullScreenCover(isPresented: $showingCard) {
             PlayerCardView(player: player)
+        }
+        .confirmationDialog("Include player photo?", isPresented: $confirmingPhotoExport, titleVisibility: .visible) {
+            Button("Include Photo") { exportStats(includePhotos: true) }
+            Button("Without Photo (smaller file)") { exportStats(includePhotos: false) }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("The photo makes the file larger to share.")
         }
         .sheet(item: $exportFile) { file in
             ShareSheet(items: [file.url])
@@ -267,10 +275,16 @@ struct PlayerDetailView: View {
         Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
     }
 
+    /// Ask about the photo only when the player actually has one; otherwise export straight away.
+    private func beginExport() {
+        if player.photoData != nil { confirmingPhotoExport = true }
+        else { exportStats(includePhotos: false) }
+    }
+
     /// Build the player's archive JSON, write it to a temp file, and present the share sheet.
-    private func exportStats() {
+    private func exportStats(includePhotos: Bool) {
         do {
-            let data = try PlayerArchive(exporting: player).encoded()
+            let data = try PlayerArchive(exporting: player, includePhotos: includePhotos).encoded()
             let url = URL.temporaryDirectory.appending(path: exportFilename)
             try data.write(to: url, options: .atomic)
             exportFile = ExportFile(url: url)

@@ -136,7 +136,7 @@ extension SeasonArchive {
 // MARK: - Export (read-only)
 
 extension SeasonArchive {
-    init(exporting season: Season) {
+    init(exporting season: Season, includePhotos: Bool = true) {
         format = Self.currentFormat
         version = Self.currentVersion
         exportedAt = .now
@@ -174,7 +174,8 @@ extension SeasonArchive {
 
         players = playerList.map {
             PlayerDTO(name: $0.name, jerseyNumber: $0.jerseyNumber, dateAdded: $0.dateAdded,
-                      battingStance: $0.battingStance, photoData: $0.photoData)
+                      battingStance: $0.battingStance,
+                      photoData: includePhotos ? $0.photoData : nil)
         }
         teams = teamList.map {
             TeamDTO(name: $0.name, logoName: $0.logoName, logoImageData: $0.logoImageData,

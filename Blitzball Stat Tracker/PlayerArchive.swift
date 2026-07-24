@@ -70,12 +70,13 @@ extension PlayerArchive {
 
 extension PlayerArchive {
     /// Capture a player's complete finished-game history (real games + any prior imports).
-    init(exporting player: Player) {
+    init(exporting player: Player, includePhotos: Bool = true) {
         format = Self.currentFormat
         version = Self.currentVersion
         exportedAt = .now
         self.player = PlayerInfo(name: player.name, jerseyNumber: player.jerseyNumber,
-                                 battingStance: player.battingStance, photoData: player.photoData)
+                                 battingStance: player.battingStance,
+                                 photoData: includePhotos ? player.photoData : nil)
         statLines = player.finalStatLines.map { line in
             if line.isArchived {
                 // Already a standalone archived line — read its stored context directly.
