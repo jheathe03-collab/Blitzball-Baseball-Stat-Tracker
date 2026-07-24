@@ -33,28 +33,34 @@ struct PlayerCardView: View {
         ZStack {
             Color.black.opacity(0.92).ignoresSafeArea()
 
-            VStack(spacing: 18) {
-                FlipCard {
-                    CardFront(player: player)
-                } back: {
-                    CardBack(player: player)
-                }
-                .frame(width: 300, height: 420)
-                .shadow(color: .black.opacity(0.5), radius: 16, y: 10)
+            GeometryReader { geo in
+                // Fill most of the width, keeping the 2.5:3.5 card ratio; leave ~150pt below for the
+                // "tap to flip" hint + photo button.
+                let cardW = min(geo.size.width * 0.92, (geo.size.height - 150) / 1.4)
+                let cardH = cardW * 1.4
+                VStack(spacing: 18) {
+                    FlipCard {
+                        CardFront(player: player)
+                    } back: {
+                        CardBack(player: player)
+                    }
+                    .frame(width: cardW, height: cardH)
+                    .shadow(color: .black.opacity(0.5), radius: 16, y: 10)
 
-                Text("Tap the card to flip")
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.6))
+                    Text("Tap the card to flip")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.6))
 
-                PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
-                    Label(player.photoData == nil ? "Add Photo" : "Change Photo",
-                          systemImage: "photo.badge.plus")
-                        .font(.subheadline.bold())
+                    PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
+                        Label(player.photoData == nil ? "Add Photo" : "Change Photo",
+                              systemImage: "photo.badge.plus")
+                            .font(.subheadline.bold())
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
                 }
-                .buttonStyle(.bordered)
-                .tint(.white)
+                .frame(width: geo.size.width, height: geo.size.height)
             }
-            .padding()
         }
         .overlay(alignment: .topLeading) {
             Button { dismiss() } label: {
@@ -105,7 +111,7 @@ private struct CardFrame: View {
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(.white.opacity(0.18), lineWidth: 1)
+                .strokeBorder(.white, lineWidth: 3)
         )
     }
 }
@@ -171,7 +177,7 @@ private struct CardFront: View {
                 }
 
                 PlayerPortrait(player: player)
-                    .frame(height: 190)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 VStack(spacing: 2) {
                     Text(player.name)
