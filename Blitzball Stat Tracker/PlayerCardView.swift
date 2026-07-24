@@ -109,17 +109,16 @@ private extension View {
     func vintageCard() -> some View { modifier(VintageCard()) }
 }
 
-/// A ribbon banner with inward-chevron ends, for the team name.
+/// A ribbon banner for the team name: a "flag" chevron point on the LEFT, squared off on the RIGHT.
 private struct BannerShape: Shape {
     func path(in rect: CGRect) -> Path {
         let notch = min(rect.height * 0.7, rect.width * 0.14)
         var p = Path()
-        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX - notch, y: rect.midY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.minX + notch, y: rect.midY))
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY))       // top-left
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))    // top-right
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))    // bottom-right (squared)
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))    // bottom-left
+        p.addLine(to: CGPoint(x: rect.minX + notch, y: rect.midY))  // left chevron point
         p.closeSubpath()
         return p
     }
@@ -166,7 +165,7 @@ private struct CardFront: View {
             .clipped()
             .overlay(alignment: .topLeading) { teamLogoBadge.padding(8) }
             .overlay(alignment: .topTrailing) { avgBadge.padding(8) }
-            .overlay(alignment: .bottom) { teamBanner.padding(.bottom, 10) }
+            .overlay(alignment: .bottomTrailing) { teamBanner.padding(.bottom, 6).padding(.trailing, 8) }
     }
 
     private var nameStrip: some View {
@@ -216,10 +215,9 @@ private struct CardFront: View {
                 .italic()
                 .foregroundStyle(.white)
                 .lineLimit(1).minimumScaleFactor(0.5)
-                .padding(.horizontal, 26).padding(.vertical, 6)
+                .padding(.leading, 28).padding(.trailing, 16).padding(.vertical, 6)
                 .background(BannerShape().fill(CardPalette.navy))
                 .overlay(BannerShape().stroke(CardPalette.gold, lineWidth: 2))
-                .padding(.horizontal, 16)
         }
     }
 }
