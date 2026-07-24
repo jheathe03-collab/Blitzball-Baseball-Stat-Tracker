@@ -31,6 +31,8 @@ struct PlayerCardView: View {
     @Bindable var player: Player
     @Environment(\.dismiss) private var dismiss
     @State private var photoItem: PhotosPickerItem?
+    // A freshly picked photo waiting to be framed in the crop screen.
+    @State private var pendingCrop: PendingCrop?
 
     var body: some View {
         ZStack {
@@ -79,15 +81,27 @@ struct PlayerCardView: View {
             guard let newItem else { return }
             Task { await loadPhoto(newItem) }
         }
+        // Frame the freshly picked photo before saving it.
+        .sheet(item: $pendingCrop) { pending in
+            PhotoCropView(image: pending.image) { data in
+                player.photoData = data
+            }
+        }
     }
 
     @MainActor
     private func loadPhoto(_ item: PhotosPickerItem) async {
         guard let data = try? await item.loadTransferable(type: Data.self),
-              let thumb = TeamLogo.squareThumbnail(from: data) else { return }
-        player.photoData = thumb
+              let ui = UIImage(data: data) else { return }
+        pendingCrop = PendingCrop(image: ui)
         photoItem = nil
     }
+}
+
+/// A picked photo held while the crop screen frames it.
+private struct PendingCrop: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }
 
 // MARK: - Shared vintage frame (cream border + blue/red double line)
