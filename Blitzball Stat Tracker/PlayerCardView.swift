@@ -132,16 +132,24 @@ private struct PlayerPortrait: View {
     let player: Player
 
     var body: some View {
-        if let data = player.photoData, let ui = UIImage(data: data) {
-            Image(uiImage: ui).resizable().scaledToFill()
-        } else {
-            ZStack {
-                CardPalette.frameBlue.opacity(0.12)
-                Image(systemName: "person.fill")
-                    .resizable().scaledToFit()
-                    .padding(44)
-                    .foregroundStyle(CardPalette.frameBlue.opacity(0.4))
+        // GeometryReader gives the image a definite box to fill, so a wide/tall photo fills-and-clips
+        // WITHOUT dragging the card's own size toward the image's aspect ratio.
+        GeometryReader { geo in
+            Group {
+                if let data = player.photoData, let ui = UIImage(data: data) {
+                    Image(uiImage: ui).resizable().scaledToFill()
+                } else {
+                    ZStack {
+                        CardPalette.frameBlue.opacity(0.12)
+                        Image(systemName: "person.fill")
+                            .resizable().scaledToFit()
+                            .padding(44)
+                            .foregroundStyle(CardPalette.frameBlue.opacity(0.4))
+                    }
+                }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
     }
 }
