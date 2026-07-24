@@ -93,14 +93,6 @@ private struct CardFrame: View {
             LinearGradient(colors: [CardPalette.navy, CardPalette.blue],
                            startPoint: .topTrailing, endPoint: .bottomLeading)
 
-            // A couple of angular accent slashes for the sport look (low opacity).
-            Slash().fill(CardPalette.blue.opacity(0.55))
-                .frame(width: 90).rotationEffect(.degrees(18))
-                .offset(x: 60, y: -40)
-            Slash().fill(CardPalette.magenta.opacity(0.5))
-                .frame(width: 26).rotationEffect(.degrees(18))
-                .offset(x: 8, y: 20)
-
             // Bold red accent stripe down the left edge, with a thin magenta companion line.
             HStack(spacing: 3) {
                 Rectangle().fill(CardPalette.red).frame(width: 12)
@@ -166,18 +158,25 @@ private struct CardFront: View {
         ZStack {
             CardFrame()
             VStack(spacing: 10) {
-                HStack {
-                    TeamLogoView(team: player.teams.first, size: 30)
-                    Spacer()
-                    if let number = player.jerseyNumber {
-                        Text("#\(number)")
-                            .font(.headline.monospacedDigit())
+                HStack(spacing: 10) {
+                    TeamLogoView(team: player.teams.first, size: 46)
+                    if let team = player.teams.first {
+                        Text(team.name)
+                            .font(.title3.weight(.heavy))
                             .foregroundStyle(.white)
+                            .lineLimit(1).minimumScaleFactor(0.6)
                     }
+                    Spacer()
                 }
 
                 PlayerPortrait(player: player)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Jersey number as a badge overlapping the portrait's bottom-right corner.
+                    .overlay(alignment: .bottomTrailing) {
+                        if let number = player.jerseyNumber {
+                            jerseyBadge(number)
+                        }
+                    }
 
                 VStack(spacing: 2) {
                     Text(player.name)
@@ -201,6 +200,19 @@ private struct CardFront: View {
             .padding(16)
             .padding(.leading, 6)   // clear the red stripe
         }
+    }
+
+    /// The player's number in a white circle with a red ring, hung over the portrait corner.
+    private func jerseyBadge(_ number: Int) -> some View {
+        Text("#\(number)")
+            .font(.title.weight(.heavy).monospacedDigit())
+            .foregroundStyle(CardPalette.navy)
+            .minimumScaleFactor(0.5)
+            .padding(6)
+            .frame(width: 64, height: 64)
+            .background(Circle().fill(.white))
+            .overlay(Circle().strokeBorder(CardPalette.red, lineWidth: 3))
+            .offset(x: 8, y: 10)
     }
 
     private func heroStat(_ label: String, _ value: String) -> some View {
