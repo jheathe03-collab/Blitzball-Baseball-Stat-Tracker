@@ -37,12 +37,11 @@ struct PlayerCardView: View {
             Color.black.opacity(0.92).ignoresSafeArea()
 
             GeometryReader { geo in
-                // Card height-to-width ratio. A real baseball card is 1.4; a bit taller reads more
-                // rectangular and uses the vertical space better. Tune this one value to taste.
-                let ratio: CGFloat = 1.52
-                // Fit within the screen with comfortable margins, leaving room below for the "tap to
-                // flip" hint + photo button. Whichever of width/height binds wins.
-                let cardW = min(geo.size.width * 0.80, (geo.size.height - 200) / ratio)
+                // Card height-to-width ratio (real card is 1.4; taller reads more rectangular).
+                let ratio: CGFloat = 1.5
+                // Make the card NARROWER (0.72 of width) so it reads rectangular and always keeps
+                // side margins; also cap the height so it never runs past the controls below.
+                let cardW = min(geo.size.width * 0.72, (geo.size.height - 220) / ratio)
                 let cardH = cardW * ratio
                 VStack(spacing: 18) {
                     FlipCard {
