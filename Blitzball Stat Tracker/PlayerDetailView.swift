@@ -14,6 +14,7 @@ struct PlayerDetailView: View {
     // edit it with two-way bindings — we'll lean on that when we add stat entry.
     @Bindable var player: Player
     @State private var showingEdit = false
+    @State private var showingCard = false
     // Stat filters (nil = "All"). Tournament games don't exist yet, so Tournament shows 0s for now.
     @State private var selectedMode: GameMode?
     @State private var selectedYear: Int?
@@ -219,6 +220,9 @@ struct PlayerDetailView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
+                    Button { showingCard = true } label: {
+                        Label("Baseball Card", systemImage: "person.crop.rectangle")
+                    }
                     Button { showingEdit = true } label: {
                         Label("Edit Player", systemImage: "pencil")
                     }
@@ -234,6 +238,9 @@ struct PlayerDetailView: View {
         }
         .sheet(isPresented: $showingEdit) {
             EditPlayerView(player: player)
+        }
+        .fullScreenCover(isPresented: $showingCard) {
+            PlayerCardView(player: player)
         }
         .sheet(item: $exportFile) { file in
             ShareSheet(items: [file.url])

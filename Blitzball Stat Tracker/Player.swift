@@ -22,6 +22,10 @@ final class Player {
     /// Optional batting stance: "LH" or "RH".
     var battingStance: String?
 
+    /// Optional imported portrait photo for the player's baseball card, stored as a small square
+    /// thumbnail (see TeamLogo.squareThumbnail). nil = no photo yet.
+    var photoData: Data?
+
     // A player's career batting/pitching aren't stored — they're COMPUTED by summing this
     // player's finished-game stat lines (see Player+Career.swift). "Games are the source."
 
@@ -43,11 +47,13 @@ final class Player {
         name: String,
         jerseyNumber: Int? = nil,
         battingStance: String? = nil,
+        photoData: Data? = nil,
         dateAdded: Date = .now
     ) {
         self.name = name
         self.jerseyNumber = jerseyNumber
         self.battingStance = battingStance
+        self.photoData = photoData
         self.dateAdded = dateAdded
     }
 }
