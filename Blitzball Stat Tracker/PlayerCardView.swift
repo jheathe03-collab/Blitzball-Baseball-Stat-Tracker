@@ -37,9 +37,9 @@ struct PlayerCardView: View {
             Color.black.opacity(0.92).ignoresSafeArea()
 
             GeometryReader { geo in
-                // Fill most of the width, keeping the 2.5:3.5 card ratio; leave ~150pt below for the
-                // "tap to flip" hint + photo button.
-                let cardW = min(geo.size.width * 0.92, (geo.size.height - 150) / 1.4)
+                // Fit the 2.5:3.5 card within the screen with comfortable margins, leaving room below
+                // for the "tap to flip" hint + photo button. Whichever of width/height binds wins.
+                let cardW = min(geo.size.width * 0.80, (geo.size.height - 200) / 1.4)
                 let cardH = cardW * 1.4
                 VStack(spacing: 18) {
                     FlipCard {
