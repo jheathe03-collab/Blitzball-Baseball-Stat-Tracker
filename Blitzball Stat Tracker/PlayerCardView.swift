@@ -2,10 +2,11 @@
 //  PlayerCardView.swift
 //  Blitzball Stat Tracker
 //
-//  A player's "baseball card": a flip card (see FlipCard) whose front shows their portrait, identity
-//  and hero stats, and whose back shows a full career stat table. The card frame is drawn natively in
-//  SwiftUI (red/blue angular "sport" look) — no image asset — so there's nothing external to license.
-//  The only imported image is the optional player photo.
+//  A player's "baseball card": a flip card (see FlipCard) styled after a classic 1991-Topps layout —
+//  a cream border, a thin blue+red double frame, the player's photo, a corner team logo, batting
+//  average up top, a team-name banner, and a bottom number/name strip. The back matches with the same
+//  cream/framed look over a full career stat table. All drawn natively in SwiftUI — the only imported
+//  image is the optional player photo.
 //
 
 import SwiftUI
@@ -13,13 +14,15 @@ import SwiftData
 import PhotosUI
 import UIKit
 
-// MARK: - Palette (sampled from the sport-template reference)
+// MARK: - Palette (classic cardboard look)
 
 private enum CardPalette {
-    static let navy    = Color(red: 0.09, green: 0.14, blue: 0.34)
-    static let blue    = Color(red: 0.15, green: 0.34, blue: 0.82)
-    static let magenta = Color(red: 0.85, green: 0.20, blue: 0.46)
-    static let red     = Color(red: 0.80, green: 0.12, blue: 0.15)
+    static let cream     = Color(red: 0.94, green: 0.92, blue: 0.85)
+    static let frameBlue = Color(red: 0.11, green: 0.23, blue: 0.55)
+    static let frameRed  = Color(red: 0.74, green: 0.15, blue: 0.17)
+    static let navy      = Color(red: 0.09, green: 0.16, blue: 0.38)
+    static let gold      = Color(red: 0.85, green: 0.66, blue: 0.22)
+    static let ink       = Color(red: 0.12, green: 0.14, blue: 0.22)
 }
 
 // MARK: - Full-screen presentation
@@ -85,65 +88,60 @@ struct PlayerCardView: View {
     }
 }
 
-// MARK: - Card frame (native SwiftUI "sport" styling)
+// MARK: - Shared vintage frame (cream border + blue/red double line)
 
-private struct CardFrame: View {
-    var body: some View {
-        ZStack {
-            LinearGradient(colors: [CardPalette.navy, CardPalette.blue],
-                           startPoint: .topTrailing, endPoint: .bottomLeading)
-
-            // Bold red accent stripe down the left edge, with a thin magenta companion line.
-            HStack(spacing: 3) {
-                Rectangle().fill(CardPalette.red).frame(width: 12)
-                Rectangle().fill(CardPalette.magenta).frame(width: 3)
-                Spacer()
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(.white, lineWidth: 3)
-        )
+private struct VintageCard: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                ZStack {
+                    Rectangle().stroke(CardPalette.frameBlue, lineWidth: 3)
+                    Rectangle().inset(by: 3).stroke(CardPalette.frameRed, lineWidth: 2)
+                }
+            )
+            .padding(14)                          // cream border thickness
+            .background(CardPalette.cream)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
-/// A leaning parallelogram used for the angular accent slashes.
-private struct Slash: Shape {
+private extension View {
+    func vintageCard() -> some View { modifier(VintageCard()) }
+}
+
+/// A ribbon banner with inward-chevron ends, for the team name.
+private struct BannerShape: Shape {
     func path(in rect: CGRect) -> Path {
+        let notch = min(rect.height * 0.7, rect.width * 0.14)
         var p = Path()
-        let slant = rect.width * 0.6
-        p.move(to: CGPoint(x: rect.minX + slant, y: rect.minY))
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
         p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX - slant, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX - notch, y: rect.midY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
         p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX + notch, y: rect.midY))
         p.closeSubpath()
         return p
     }
 }
 
-// MARK: - Player portrait
+// MARK: - Player portrait (fills its area)
 
 private struct PlayerPortrait: View {
     let player: Player
 
     var body: some View {
-        ZStack {
-            if let data = player.photoData, let ui = UIImage(data: data) {
-                Image(uiImage: ui).resizable().scaledToFill()
-            } else {
-                Rectangle().fill(.white.opacity(0.08))
+        if let data = player.photoData, let ui = UIImage(data: data) {
+            Image(uiImage: ui).resizable().scaledToFill()
+        } else {
+            ZStack {
+                CardPalette.frameBlue.opacity(0.12)
                 Image(systemName: "person.fill")
                     .resizable().scaledToFit()
-                    .padding(28)
-                    .foregroundStyle(.white.opacity(0.3))
+                    .padding(44)
+                    .foregroundStyle(CardPalette.frameBlue.opacity(0.4))
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(CardPalette.magenta.opacity(0.8), lineWidth: 2)
-        )
     }
 }
 
@@ -151,111 +149,125 @@ private struct PlayerPortrait: View {
 
 private struct CardFront: View {
     let player: Player
-
     private var batting: BattingStats { player.careerBatting }
 
     var body: some View {
-        ZStack {
-            CardFrame()
-            VStack(spacing: 10) {
-                HStack(spacing: 10) {
-                    TeamLogoView(team: player.teams.first, size: 46)
-                    if let team = player.teams.first {
-                        Text(team.name)
-                            .font(.title3.weight(.heavy))
-                            .foregroundStyle(.white)
-                            .lineLimit(1).minimumScaleFactor(0.6)
-                    }
-                    Spacer()
-                }
+        VStack(spacing: 0) {
+            photoArea
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            nameStrip
+        }
+        .vintageCard()
+    }
 
-                PlayerPortrait(player: player)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // Jersey number as a badge overlapping the portrait's bottom-right corner.
-                    .overlay(alignment: .bottomTrailing) {
-                        if let number = player.jerseyNumber {
-                            jerseyBadge(number)
-                        }
-                    }
+    private var photoArea: some View {
+        ZStack { PlayerPortrait(player: player) }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .overlay(alignment: .topLeading) { teamLogoBadge.padding(8) }
+            .overlay(alignment: .topTrailing) { avgBadge.padding(8) }
+            .overlay(alignment: .bottom) { teamBanner.padding(.bottom, 10) }
+    }
 
-                VStack(spacing: 2) {
-                    Text(player.name)
-                        .font(Theme.screenSubtitle)
-                        .foregroundStyle(.white)
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                    if let stance = player.battingStance {
-                        Text(stance == "LH" ? "Bats: Left" : "Bats: Right")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                }
-
-                HStack(spacing: 6) {
-                    heroStat("AVG", StatFormat.rate(batting.battingAverage))
-                    heroStat("HR", "\(batting.homeRuns)")
-                    heroStat("RBI", "\(batting.rbi)")
-                    heroStat("OPS", StatFormat.rate(batting.onBasePlusSlugging))
-                }
+    private var nameStrip: some View {
+        HStack {
+            if let number = player.jerseyNumber {
+                Text("#\(number)").font(.subheadline.weight(.black).monospacedDigit())
             }
-            .padding(16)
-            .padding(.leading, 6)   // clear the red stripe
+            Spacer()
+            Text(player.name.uppercased())
+                .font(.subheadline.weight(.black))
+                .lineLimit(1).minimumScaleFactor(0.6)
         }
-    }
-
-    /// The player's number in a white circle with a red ring, hung over the portrait corner.
-    private func jerseyBadge(_ number: Int) -> some View {
-        Text("#\(number)")
-            .font(.title.weight(.heavy).monospacedDigit())
-            .foregroundStyle(CardPalette.navy)
-            .minimumScaleFactor(0.5)
-            .padding(6)
-            .frame(width: 64, height: 64)
-            .background(Circle().fill(.white))
-            .overlay(Circle().strokeBorder(CardPalette.red, lineWidth: 3))
-            .offset(x: 8, y: 10)
-    }
-
-    private func heroStat(_ label: String, _ value: String) -> some View {
-        VStack(spacing: 1) {
-            Text(value).font(.subheadline.bold().monospacedDigit()).foregroundStyle(.white)
-            Text(label).font(.caption2).foregroundStyle(.white.opacity(0.7))
-        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .frame(height: 30)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
-        .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(
+            LinearGradient(colors: [CardPalette.navy, CardPalette.frameBlue],
+                           startPoint: .leading, endPoint: .trailing)
+        )
+    }
+
+    private var teamLogoBadge: some View {
+        TeamLogoView(team: player.teams.first, size: 54)
+            .padding(5)
+            .background(Circle().fill(.white.opacity(0.92)))
+            .overlay(Circle().stroke(CardPalette.frameBlue, lineWidth: 2))
+    }
+
+    private var avgBadge: some View {
+        VStack(spacing: 0) {
+            Text("AVG").font(.system(size: 9, weight: .bold)).foregroundStyle(.white.opacity(0.9))
+            Text(StatFormat.rate(batting.battingAverage))
+                .font(.headline.weight(.black).monospacedDigit())
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 6).fill(CardPalette.frameBlue))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(CardPalette.gold, lineWidth: 1.5))
+    }
+
+    @ViewBuilder
+    private var teamBanner: some View {
+        if let team = player.teams.first {
+            Text(team.name.uppercased())
+                .font(.system(.subheadline, design: .serif).weight(.black))
+                .italic()
+                .foregroundStyle(.white)
+                .lineLimit(1).minimumScaleFactor(0.5)
+                .padding(.horizontal, 26).padding(.vertical, 6)
+                .background(BannerShape().fill(CardPalette.navy))
+                .overlay(BannerShape().stroke(CardPalette.gold, lineWidth: 2))
+                .padding(.horizontal, 16)
+        }
     }
 }
 
-// MARK: - Back face
+// MARK: - Back face (matches the front's cream/framed look)
 
 private struct CardBack: View {
     let player: Player
-
     private var batting: BattingStats { player.careerBatting }
     private var pitching: PitchingStats { player.careerPitching }
     private var games: Int { player.finalStatLines.count }
 
     var body: some View {
-        ZStack {
-            CardFrame()
-            VStack(alignment: .leading, spacing: 8) {
-                Text(player.name)
-                    .font(Theme.screenSubtitle)
-                    .foregroundStyle(.white)
-                    .lineLimit(1).minimumScaleFactor(0.6)
+        content.vintageCard()
+    }
 
-                sectionLabel("Batting — Career")
-                statGrid(battingStats)
-
-                if pitching.outsRecorded > 0 {
-                    sectionLabel("Pitching — Career")
-                    statGrid(pitchingStats)
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                TeamLogoView(team: player.teams.first, size: 32)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(player.name.uppercased())
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(CardPalette.ink)
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                    HStack(spacing: 6) {
+                        if let team = player.teams.first {
+                            Text(team.name).font(.caption).foregroundStyle(CardPalette.frameBlue)
+                        }
+                        if let number = player.jerseyNumber {
+                            Text("#\(number)").font(.caption.bold()).foregroundStyle(CardPalette.frameRed)
+                        }
+                    }
                 }
-                Spacer(minLength: 0)
+                Spacer()
             }
-            .padding(16)
-            .padding(.leading, 6)
+            Rectangle().fill(CardPalette.frameRed).frame(height: 2)
+
+            sectionLabel("Batting — Career")
+            statGrid(battingStats)
+
+            if pitching.outsRecorded > 0 {
+                sectionLabel("Pitching — Career")
+                statGrid(pitchingStats)
+            }
+            Spacer(minLength: 0)
         }
+        .padding(12)
     }
 
     private var battingStats: [(String, String)] {
@@ -278,22 +290,22 @@ private struct CardBack: View {
     }
 
     private func sectionLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.caption.bold())
-            .foregroundStyle(CardPalette.magenta)
-            .padding(.top, 2)
+        Text(text.uppercased())
+            .font(.caption.weight(.black))
+            .foregroundStyle(CardPalette.frameRed)
     }
 
     private func statGrid(_ stats: [(String, String)]) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 4) {
             ForEach(stats, id: \.0) { stat in
-                VStack(spacing: 1) {
-                    Text(stat.1).font(.caption2.bold().monospacedDigit()).foregroundStyle(.white)
-                    Text(stat.0).font(.system(size: 9)).foregroundStyle(.white.opacity(0.6))
+                VStack(spacing: 0) {
+                    Text(stat.1).font(.caption.bold().monospacedDigit()).foregroundStyle(CardPalette.ink)
+                    Text(stat.0).font(.system(size: 9)).foregroundStyle(CardPalette.frameBlue)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
-                .background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 6))
+                .background(RoundedRectangle(cornerRadius: 4).fill(.white.opacity(0.5)))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(CardPalette.frameBlue.opacity(0.3), lineWidth: 0.5))
             }
         }
     }
