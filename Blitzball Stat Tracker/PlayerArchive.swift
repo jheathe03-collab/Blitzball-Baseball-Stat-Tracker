@@ -32,6 +32,8 @@ struct PlayerArchive: Codable {
         // → nil via Swift's synthesized decodeIfPresent for Optionals). Default keeps memberwise
         // init source-compatible with any older call site that only passed name + jerseyNumber.
         var battingStance: String? = nil
+        // The card portrait (base64 in JSON). Optional so older/photo-less archives still decode.
+        var photoData: Data? = nil
     }
 
     struct ArchivedStatLineDTO: Codable {
@@ -73,7 +75,7 @@ extension PlayerArchive {
         version = Self.currentVersion
         exportedAt = .now
         self.player = PlayerInfo(name: player.name, jerseyNumber: player.jerseyNumber,
-                                 battingStance: player.battingStance)
+                                 battingStance: player.battingStance, photoData: player.photoData)
         statLines = player.finalStatLines.map { line in
             if line.isArchived {
                 // Already a standalone archived line — read its stored context directly.
@@ -187,7 +189,7 @@ extension PlayerArchive {
         switch resolution {
         case .createNew:
             let player = Player(name: player.name, jerseyNumber: player.jerseyNumber,
-                                battingStance: player.battingStance)
+                                battingStance: player.battingStance, photoData: player.photoData)
             context.insert(player)
             target = player
 
@@ -197,6 +199,7 @@ extension PlayerArchive {
             // jerseyNumber: only backfill when the existing player doesn't already have it.
             if existing.jerseyNumber == nil { existing.jerseyNumber = player.jerseyNumber }
             if existing.battingStance == nil { existing.battingStance = player.battingStance }
+            if existing.photoData == nil { existing.photoData = player.photoData }
             existingKeys = Set(existing.gameStatLines
                 .filter { $0.isArchived && $0.game == nil }
                 .map(ArchivedLineKey.init(line:)))
@@ -210,6 +213,7 @@ extension PlayerArchive {
             for line in toDelete { context.delete(line) }
             if existing.jerseyNumber == nil { existing.jerseyNumber = player.jerseyNumber }
             if existing.battingStance == nil { existing.battingStance = player.battingStance }
+            if existing.photoData == nil { existing.photoData = player.photoData }
             target = existing
         }
 
