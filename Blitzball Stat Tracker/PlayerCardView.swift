@@ -39,9 +39,9 @@ struct PlayerCardView: View {
             GeometryReader { geo in
                 // Card height-to-width ratio (real card is 1.4; taller reads more rectangular).
                 let ratio: CGFloat = 1.5
-                // Make the card NARROWER (0.72 of width) so it reads rectangular and always keeps
-                // side margins; also cap the height so it never runs past the controls below.
-                let cardW = min(geo.size.width * 0.72, (geo.size.height - 220) / ratio)
+                // Fill more of the screen (0.84 of width) while keeping side margins; the height cap
+                // keeps it clear of the controls below on shorter screens.
+                let cardW = min(geo.size.width * 0.84, (geo.size.height - 180) / ratio)
                 let cardH = cardW * ratio
                 VStack(spacing: 18) {
                     FlipCard {
