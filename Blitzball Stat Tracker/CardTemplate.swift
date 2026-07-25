@@ -45,6 +45,7 @@ struct PlayerPortrait: View {
 enum CardTemplateID: String, CaseIterable, Identifiable {
     case classic
     case wood
+    case vintage
 
     var id: String { rawValue }
 
@@ -52,6 +53,7 @@ enum CardTemplateID: String, CaseIterable, Identifiable {
         switch self {
         case .classic: return "Classic"
         case .wood:    return "Woodgrain"
+        case .vintage: return "Vintage"
         }
     }
 }
@@ -63,6 +65,7 @@ func cardFrontView(_ template: CardTemplateID, player: Player) -> some View {
     switch template {
     case .classic: ClassicCardFront(player: player)
     case .wood:    WoodCardFront(player: player)
+    case .vintage: VintageCardFront(player: player)
     }
 }
 
@@ -71,6 +74,7 @@ func cardBackView(_ template: CardTemplateID, player: Player) -> some View {
     switch template {
     case .classic: ClassicCardBack(player: player)
     case .wood:    WoodCardBack(player: player)
+    case .vintage: VintageCardBack(player: player)
     }
 }
 

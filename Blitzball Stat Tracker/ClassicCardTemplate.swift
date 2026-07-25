@@ -19,6 +19,7 @@ private enum CardPalette {
     static let navy      = Color(red: 0.09, green: 0.16, blue: 0.38)
     static let gold      = Color(red: 0.85, green: 0.66, blue: 0.22)
     static let ink       = Color(red: 0.12, green: 0.14, blue: 0.22)
+    
 }
 
 // MARK: - Shared vintage frame (cream border + blue/red double line)
@@ -104,7 +105,7 @@ struct ClassicCardFront: View {
     private var teamLogoBadge: some View {
         TeamLogoView(team: player.teams.first, size: 54)
             .padding(5)
-            .background(Circle().fill(.white.opacity(0.92)))
+            .background(Circle().fill(CardPalette.cream.opacity(0.92)))
             .overlay(Circle().stroke(CardPalette.frameBlue, lineWidth: 2))
     }
 
