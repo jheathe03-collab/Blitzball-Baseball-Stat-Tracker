@@ -77,10 +77,10 @@ struct VintageCardFront: View {
     }
 
     private var teamCircle: some View {
-        TeamLogoView(team: player.teams.first, size: 52)
+        TeamLogoView(team: player.teams.first, size: 110)
             .padding(7)
             .background(Circle().fill(VintagePalette.cream))
-            .overlay(Circle().stroke(VintagePalette.green, lineWidth: 5))
+            .overlay(Circle().stroke(VintagePalette.green, lineWidth: 2.5))
             .overlay(Circle().inset(by: 6).stroke(VintagePalette.ink.opacity(0.4), lineWidth: 1))
     }
 

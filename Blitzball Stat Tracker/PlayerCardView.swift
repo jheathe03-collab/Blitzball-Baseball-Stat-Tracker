@@ -31,19 +31,22 @@ struct PlayerCardView: View {
             Color.black.opacity(0.92).ignoresSafeArea()
 
             GeometryReader { geo in
-                // Card height-to-width ratio (real card is 1.4; taller reads more rectangular).
-                let ratio: CGFloat = 1.5
                 // Fill more of the screen (0.84 of width) while keeping side margins; the height cap
                 // keeps it clear of the controls below on shorter screens.
-                let cardW = min(geo.size.width * 0.84, (geo.size.height - 180) / ratio)
-                let cardH = cardW * ratio
+                let cardW = min(geo.size.width * 0.84, (geo.size.height - 180) / CardMetrics.ratio)
+                let cardH = cardW * CardMetrics.ratio
+                // Lay the card out at the canonical native size and SCALE to fit — identical to how
+                // the picker previews render, so a template looks the same on the big card and the tile.
+                let scale = cardW / CardMetrics.nativeWidth
                 VStack(spacing: 18) {
                     FlipCard {
                         cardFrontView(template, player: player)
                     } back: {
                         cardBackView(template, player: player)
                     }
-                    .frame(width: cardW, height: cardH)
+                    .frame(width: CardMetrics.nativeWidth, height: CardMetrics.nativeHeight)
+                    .scaleEffect(scale)
+                    .frame(width: cardW, height: cardH)   // collapse layout to the scaled size
                     .shadow(color: .black.opacity(0.5), radius: 16, y: 10)
 
                     Text("Tap the card to flip")

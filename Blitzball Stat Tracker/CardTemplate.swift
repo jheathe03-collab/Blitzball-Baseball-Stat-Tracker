@@ -12,6 +12,15 @@
 import SwiftUI
 import UIKit
 
+/// The canonical size a card's CONTENT is always laid out at. Both the full-screen card and the
+/// picker previews render at this size and then scale to fit — so fixed point values inside a
+/// template look identical everywhere (no "fits on the big card but breaks in the preview" drift).
+enum CardMetrics {
+    static let nativeWidth: CGFloat = 320
+    static let ratio: CGFloat = 1.5
+    static var nativeHeight: CGFloat { nativeWidth * ratio }
+}
+
 // MARK: - Shared portrait (used by every template)
 
 /// Renders the player's photo filling its area (or a neutral placeholder). A GeometryReader gives
@@ -87,10 +96,6 @@ struct CardTemplatePicker: View {
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 20)]
 
-    // Render each preview at the real card size, then scale the whole thing down — so it's a faithful
-    // miniature instead of the layout reflowing/cropping in a tiny frame.
-    private let nativeW: CGFloat = 300
-
     private var current: CardTemplateID {
         CardTemplateID(rawValue: player.cardTemplate ?? "") ?? .classic
     }
@@ -117,8 +122,9 @@ struct CardTemplatePicker: View {
     private func cell(_ template: CardTemplateID) -> some View {
         let selected = current == template
         let tileW: CGFloat = 160
-        let scale = tileW / nativeW
-        let nativeH = nativeW * 1.5
+        let scale = tileW / CardMetrics.nativeWidth
+        let nativeW = CardMetrics.nativeWidth
+        let nativeH = CardMetrics.nativeHeight
         return Button {
             player.cardTemplate = template.rawValue
             dismiss()
