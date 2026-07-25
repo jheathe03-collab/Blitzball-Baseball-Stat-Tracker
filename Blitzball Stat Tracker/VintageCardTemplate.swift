@@ -46,26 +46,30 @@ struct VintageCardFront: View {
     var body: some View {
         ZStack {
             PaperBackground()
-            VStack(spacing: 0) {
-                photoFramed
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                bottomInfo
-                    .frame(height: 78)
-                    .overlay(alignment: .topLeading) { teamCircle.offset(x: 10, y: -30) }
-            }
-            .padding(12)
+            framedContent.padding(10)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(VintagePalette.green, lineWidth: 2))
     }
 
-    private var photoFramed: some View {
-        PlayerPortrait(player: player)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .padding(5)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(VintagePalette.green))
-            .overlay(alignment: .topTrailing) { blitzLogo.padding(8) }
+    /// Photo + bottom info wrapped in ONE continuous green frame, with a green seam line (meeting the
+    /// frame on both sides) that the team-logo circle straddles — like the real 1983 card.
+    private var framedContent: some View {
+        VStack(spacing: 0) {
+            PlayerPortrait(player: player)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .overlay(alignment: .topTrailing) { blitzLogo.padding(6) }
+            Rectangle().fill(VintagePalette.green).frame(height: 3)   // seam, runs to both frame sides
+            bottomSection
+                .frame(height: 82)
+                .overlay(alignment: .topLeading) { teamCircle.offset(x: 4, y: -33) }
+        }
+        .padding(3)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(VintagePalette.green, lineWidth: 3)
+        )
     }
 
     private var blitzLogo: some View {
@@ -74,15 +78,16 @@ struct VintageCardFront: View {
 
     private var teamCircle: some View {
         TeamLogoView(team: player.teams.first, size: 52)
-            .padding(6)
+            .padding(7)
             .background(Circle().fill(VintagePalette.cream))
-            .overlay(Circle().stroke(VintagePalette.green, lineWidth: 4))
+            .overlay(Circle().stroke(VintagePalette.green, lineWidth: 5))
+            .overlay(Circle().inset(by: 6).stroke(VintagePalette.ink.opacity(0.4), lineWidth: 1))
     }
 
-    private var bottomInfo: some View {
+    private var bottomSection: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
-                Color.clear.frame(width: 74)   // reserve room for the straddling circle
+            HStack(alignment: .center, spacing: 8) {
+                Color.clear.frame(width: 74)   // room for the straddling circle
                 VStack(alignment: .leading, spacing: 1) {
                     Text(player.name.uppercased())
                         .font(.subheadline.weight(.black))
@@ -96,8 +101,7 @@ struct VintageCardFront: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.top, 8)
-            Spacer(minLength: 0)
+            .frame(maxHeight: .infinity)
             teamNameBar
         }
     }
