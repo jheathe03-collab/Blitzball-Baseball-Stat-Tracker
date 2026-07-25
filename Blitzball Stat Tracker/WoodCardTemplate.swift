@@ -115,7 +115,7 @@ struct WoodCardFront: View {
     private var teamCircle: some View {
         TeamLogoView(team: player.teams.first, size: 52)
             .padding(5)
-            .background(Circle().fill(WoodPalette.red))
+            .background(Circle().fill(WoodPalette.cream))
             .overlay(Circle().stroke(.black, lineWidth: 1.5))
     }
 

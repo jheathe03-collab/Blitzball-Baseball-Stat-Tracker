@@ -10,6 +10,36 @@
 //
 
 import SwiftUI
+import UIKit
+
+// MARK: - Shared portrait (used by every template)
+
+/// Renders the player's photo filling its area (or a neutral placeholder). A GeometryReader gives
+/// the image a definite box to fill+clip, so a wide/tall photo can't drag the card's own size toward
+/// the image's aspect ratio.
+struct PlayerPortrait: View {
+    let player: Player
+
+    var body: some View {
+        GeometryReader { geo in
+            Group {
+                if let data = player.photoData, let ui = UIImage(data: data) {
+                    Image(uiImage: ui).resizable().scaledToFill()
+                } else {
+                    ZStack {
+                        Color.gray.opacity(0.25)
+                        Image(systemName: "person.fill")
+                            .resizable().scaledToFit()
+                            .padding(44)
+                            .foregroundStyle(.gray.opacity(0.55))
+                    }
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
+        }
+    }
+}
 
 /// Identifies a card design. Add a case (+ its views) to introduce a new template.
 enum CardTemplateID: String, CaseIterable, Identifiable {
