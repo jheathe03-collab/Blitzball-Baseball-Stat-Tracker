@@ -62,7 +62,7 @@ struct VintageCardFront: View {
                 .overlay(alignment: .topTrailing) { blitzLogo.padding(6) }
             Rectangle().fill(VintagePalette.green).frame(height: 3)   // seam, runs to both frame sides
             bottomSection
-                .frame(height: 82)
+                .frame(height: 96)
                 .overlay(alignment: .topLeading) { teamCircle.offset(x: 4, y: -33) }
         }
         .padding(3)
@@ -84,36 +84,43 @@ struct VintageCardFront: View {
             .overlay(Circle().inset(by: 6).stroke(VintagePalette.ink.opacity(0.4), lineWidth: 1))
     }
 
+    /// The whole bottom area is crimson: a cream name plate floats on the right, the team name sits
+    /// in yellow at the bottom-right, and the team-logo circle straddles in from the top-left.
     private var bottomSection: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 8) {
-                Color.clear.frame(width: 74)   // room for the straddling circle
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(player.name.uppercased())
-                        .font(.subheadline.weight(.black))
-                        .foregroundStyle(VintagePalette.green)
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                    if let number = player.jerseyNumber {
-                        Text("#\(number)")
-                            .font(.caption.bold().monospacedDigit())
-                            .foregroundStyle(VintagePalette.ink)
-                    }
-                }
+        ZStack {
+            VintagePalette.crimson
+            VStack(spacing: 0) {
+                HStack { Spacer(minLength: 0); nameBox }
+                    .padding(.top, 8).padding(.trailing, 10)
                 Spacer(minLength: 0)
+                HStack {
+                    Spacer(minLength: 0)
+                    Text((player.teams.first?.name ?? "").uppercased())
+                        .font(.subheadline.weight(.black))
+                        .foregroundStyle(VintagePalette.yellow)
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                }
+                .padding(.trailing, 12).padding(.bottom, 8)
             }
-            .frame(maxHeight: .infinity)
-            teamNameBar
         }
     }
 
-    private var teamNameBar: some View {
-        Text((player.teams.first?.name ?? "").uppercased())
-            .font(.caption.weight(.black))
-            .foregroundStyle(VintagePalette.yellow)
-            .lineLimit(1).minimumScaleFactor(0.6)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(.horizontal, 10).padding(.vertical, 4)
-            .background(VintagePalette.crimson)
+    /// Cream name plate: player name (green) over number (black), right-aligned.
+    private var nameBox: some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            Text(player.name.uppercased())
+                .font(.subheadline.weight(.black))
+                .foregroundStyle(VintagePalette.green)
+                .lineLimit(1).minimumScaleFactor(0.5)
+            if let number = player.jerseyNumber {
+                Text("#\(number)")
+                    .font(.caption.bold().monospacedDigit())
+                    .foregroundStyle(VintagePalette.ink)
+            }
+        }
+        .frame(width: 150, alignment: .trailing)
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(VintagePalette.cream))
     }
 }
 
