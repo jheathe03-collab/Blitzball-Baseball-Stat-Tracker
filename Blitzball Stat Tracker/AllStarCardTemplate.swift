@@ -45,11 +45,11 @@ struct AllStarCardFront: View {
     var body: some View {
         ZStack {
             OrangeAbstractBackground()
-            VStack(spacing: 8) {
+            VStack(spacing: 0) {
                 topBox
                 HStack(spacing: 8) {
-                    photoFrame
-                    nameColumn
+                    photoFrame.padding(.top, 6)   // small gap below the top box, over the photo only
+                    nameColumn                    // extends up to touch the top box (connected)
                 }
             }
             .padding(14)
@@ -73,8 +73,10 @@ struct AllStarCardFront: View {
         .padding(.horizontal, 12).padding(.vertical, 7)
         .frame(maxWidth: .infinity)
         .background(OrangePalette.orange)
-        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(.white.opacity(0.7), lineWidth: 1.5))
+        // Round the top corners; square the bottom-right so it connects to the name column below it.
+        .clipShape(UnevenRoundedRectangle(cornerRadii: .init(topLeading: 6, bottomLeading: 6,
+                                                             bottomTrailing: 0, topTrailing: 6),
+                                          style: .continuous))
     }
 
     /// Player photo in a thin black frame, with small logo + ERA boxes in the bottom corners.
@@ -91,22 +93,24 @@ struct AllStarCardFront: View {
     /// Bold orange vertical column with the player name reading top-to-bottom.
     private var nameColumn: some View {
         Color.clear
-            .frame(width: 46)
+            .frame(width: 50)
             .frame(maxHeight: .infinity)
             .overlay(verticalName)
             .background(OrangePalette.orange)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(.white.opacity(0.7), lineWidth: 1.5))
+            // Square the top so it connects to the top box; round the bottom corners (card edge).
+            .clipShape(UnevenRoundedRectangle(cornerRadii: .init(topLeading: 0, bottomLeading: 6,
+                                                                 bottomTrailing: 6, topTrailing: 0),
+                                              style: .continuous))
     }
 
     /// Player name rotated to fill a vertical column (rotate around top-leading + offset to reposition).
     private var verticalName: some View {
         GeometryReader { geo in
             Text(player.name.uppercased())
-                .font(.title2.weight(.black))
+                .font(.system(size: 90, weight: .black))   // large; scales down to fill the column
                 .foregroundStyle(.white)
                 .lineLimit(1)
-                .minimumScaleFactor(0.3)
+                .minimumScaleFactor(0.05)
                 .frame(width: geo.size.height, height: geo.size.width)
                 .rotationEffect(.degrees(90), anchor: .topLeading)
                 .offset(x: geo.size.width)
