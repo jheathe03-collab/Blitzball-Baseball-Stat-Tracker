@@ -47,7 +47,11 @@ struct CardTemplatePicker: View {
     @Bindable var player: Player
     @Environment(\.dismiss) private var dismiss
 
-    private let columns = [GridItem(.adaptive(minimum: 130), spacing: 18)]
+    private let columns = [GridItem(.adaptive(minimum: 160), spacing: 20)]
+
+    // Render each preview at the real card size, then scale the whole thing down — so it's a faithful
+    // miniature instead of the layout reflowing/cropping in a tiny frame.
+    private let nativeW: CGFloat = 300
 
     private var current: CardTemplateID {
         CardTemplateID(rawValue: player.cardTemplate ?? "") ?? .classic
@@ -74,13 +78,18 @@ struct CardTemplatePicker: View {
 
     private func cell(_ template: CardTemplateID) -> some View {
         let selected = current == template
+        let tileW: CGFloat = 160
+        let scale = tileW / nativeW
+        let nativeH = nativeW * 1.5
         return Button {
             player.cardTemplate = template.rawValue
             dismiss()
         } label: {
             VStack(spacing: 8) {
                 cardFrontView(template, player: player)
-                    .frame(width: 130, height: 195)
+                    .frame(width: nativeW, height: nativeH)   // render full-size…
+                    .scaleEffect(scale)                        // …then shrink the whole card
+                    .frame(width: nativeW * scale, height: nativeH * scale)  // collapse layout to the mini size
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(selected ? Color.accentColor : .clear, lineWidth: 3)
