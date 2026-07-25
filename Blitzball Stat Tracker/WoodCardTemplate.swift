@@ -46,12 +46,28 @@ private struct Diamond: Shape {
     }
 }
 
-/// A single diagonal line across a box's top-left corner (bottom-left → top-right).
-private struct CornerDiagonal: Shape {
+/// A rounded card whose TOP-LEFT corner is cut off by a diagonal chamfer (the photo is clipped to
+/// this, so wood shows through the cut and the team-logo circle sits in the notch).
+private struct DiagonalCornerCard: Shape {
+    var cornerRadius: CGFloat = 9
+    var notch: CGFloat = 54
+
     func path(in rect: CGRect) -> Path {
+        let r = cornerRadius
         var p = Path()
-        p.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.move(to: CGPoint(x: rect.minX + notch, y: rect.minY))            // top edge, past the notch
+        p.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY))
+        p.addArc(center: CGPoint(x: rect.maxX - r, y: rect.minY + r), radius: r,
+                 startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false)
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
+        p.addArc(center: CGPoint(x: rect.maxX - r, y: rect.maxY - r), radius: r,
+                 startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        p.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
+        p.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r,
+                 startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY + notch))         // left edge up to notch
+        p.addLine(to: CGPoint(x: rect.minX + notch, y: rect.minY))         // diagonal chamfer
+        p.closeSubpath()
         return p
     }
 }
@@ -86,7 +102,7 @@ struct WoodCardFront: View {
         ZStack {
             WoodBackground()
             photoFrame
-                .overlay(alignment: .topLeading) { cornerBadge }
+                .overlay(alignment: .topLeading) { teamCircle.padding(3) }
                 .overlay(alignment: .topTrailing) { blitzDiamond.padding(7) }
                 .overlay(alignment: .bottomLeading) { avgBox.padding([.leading, .bottom], 10) }
                 .overlay(alignment: .bottomTrailing) { nameBox.padding(.trailing, 10).padding(.bottom, -6) }
@@ -96,15 +112,17 @@ struct WoodCardFront: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(WoodPalette.woodDark, lineWidth: 1))
     }
 
-    /// Photo with a white inner line inside a black outer line (nested rounded backgrounds).
+    /// Photo clipped to the notched card shape (diagonal top-left corner), with a white inner line
+    /// inside a black outer line that follow the same shape so the diagonal is bordered too.
     private var photoFrame: some View {
-        PlayerPortrait(player: player)
+        let shape = DiagonalCornerCard(cornerRadius: 9, notch: 54)
+        return PlayerPortrait(player: player)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .clipShape(shape)
             .padding(3)
-            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(.white))
+            .background(shape.fill(.white))
             .padding(2)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.black))
+            .background(shape.fill(.black))
     }
 
     private var teamCircle: some View {
@@ -121,15 +139,6 @@ struct WoodCardFront: View {
             Image("BlitzBalllogo").resizable().scaledToFit().frame(width: 22, height: 22)
         }
         .frame(width: 46, height: 46)
-    }
-
-    /// Team logo in a circle sitting over a diagonal cut at the photo's top-left corner.
-    private var cornerBadge: some View {
-        ZStack {
-            CornerDiagonal().stroke(.black, lineWidth: 2).frame(width: 50, height: 50)
-            teamCircle
-        }
-        .padding(5)
     }
 
     private var avgBox: some View {
