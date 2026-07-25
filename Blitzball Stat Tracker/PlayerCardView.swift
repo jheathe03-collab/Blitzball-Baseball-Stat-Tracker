@@ -33,6 +33,12 @@ struct PlayerCardView: View {
     @State private var photoItem: PhotosPickerItem?
     // A freshly picked photo waiting to be framed in the crop screen.
     @State private var pendingCrop: PendingCrop?
+    @State private var choosingTemplate = false
+
+    /// The player's chosen card template (falls back to Classic).
+    private var template: CardTemplateID {
+        CardTemplateID(rawValue: player.cardTemplate ?? "") ?? .classic
+    }
 
     var body: some View {
         ZStack {
@@ -47,9 +53,9 @@ struct PlayerCardView: View {
                 let cardH = cardW * ratio
                 VStack(spacing: 18) {
                     FlipCard {
-                        CardFront(player: player)
+                        cardFrontView(template, player: player)
                     } back: {
-                        CardBack(player: player)
+                        cardBackView(template, player: player)
                     }
                     .frame(width: cardW, height: cardH)
                     .shadow(color: .black.opacity(0.5), radius: 16, y: 10)
@@ -58,13 +64,24 @@ struct PlayerCardView: View {
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.6))
 
-                    PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
-                        Label(player.photoData == nil ? "Add Photo" : "Change Photo",
-                              systemImage: "photo.badge.plus")
-                            .font(.subheadline.bold())
+                    HStack(spacing: 12) {
+                        PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
+                            Label(player.photoData == nil ? "Add Photo" : "Change Photo",
+                                  systemImage: "photo.badge.plus")
+                                .font(.subheadline.bold())
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white)
+
+                        Button {
+                            choosingTemplate = true
+                        } label: {
+                            Label("Choose Card Template", systemImage: "rectangle.on.rectangle.angled")
+                                .font(.subheadline.bold())
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
             }
@@ -86,6 +103,9 @@ struct PlayerCardView: View {
             PhotoCropView(image: pending.image) { data in
                 player.photoData = data
             }
+        }
+        .sheet(isPresented: $choosingTemplate) {
+            CardTemplatePicker(player: player)
         }
     }
 
@@ -142,7 +162,7 @@ private struct BannerShape: Shape {
 
 // MARK: - Player portrait (fills its area)
 
-private struct PlayerPortrait: View {
+struct PlayerPortrait: View {
     let player: Player
 
     var body: some View {
@@ -170,7 +190,7 @@ private struct PlayerPortrait: View {
 
 // MARK: - Front face
 
-private struct CardFront: View {
+struct ClassicCardFront: View {
     let player: Player
     private var batting: BattingStats { player.careerBatting }
 
@@ -248,7 +268,7 @@ private struct CardFront: View {
 
 // MARK: - Back face (matches the front's cream/framed look)
 
-private struct CardBack: View {
+struct ClassicCardBack: View {
     let player: Player
     private var batting: BattingStats { player.careerBatting }
     private var pitching: PitchingStats { player.careerPitching }

@@ -26,6 +26,10 @@ final class Player {
     /// thumbnail (see TeamLogo.squareThumbnail). nil = no photo yet.
     var photoData: Data?
 
+    /// Which baseball-card template this player's card uses (CardTemplateID rawValue). nil = the
+    /// default "Classic" template.
+    var cardTemplate: String?
+
     // A player's career batting/pitching aren't stored — they're COMPUTED by summing this
     // player's finished-game stat lines (see Player+Career.swift). "Games are the source."
 
@@ -48,12 +52,14 @@ final class Player {
         jerseyNumber: Int? = nil,
         battingStance: String? = nil,
         photoData: Data? = nil,
+        cardTemplate: String? = nil,
         dateAdded: Date = .now
     ) {
         self.name = name
         self.jerseyNumber = jerseyNumber
         self.battingStance = battingStance
         self.photoData = photoData
+        self.cardTemplate = cardTemplate
         self.dateAdded = dateAdded
     }
 }
