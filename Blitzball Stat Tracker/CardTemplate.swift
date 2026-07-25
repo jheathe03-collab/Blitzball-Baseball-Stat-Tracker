@@ -55,6 +55,7 @@ enum CardTemplateID: String, CaseIterable, Identifiable {
     case classic
     case wood
     case vintage
+    case allStar
 
     var id: String { rawValue }
 
@@ -63,6 +64,7 @@ enum CardTemplateID: String, CaseIterable, Identifiable {
         case .classic: return "Classic"
         case .wood:    return "Woodgrain"
         case .vintage: return "Vintage"
+        case .allStar: return "All-Star"
         }
     }
 }
@@ -75,6 +77,7 @@ func cardFrontView(_ template: CardTemplateID, player: Player) -> some View {
     case .classic: ClassicCardFront(player: player)
     case .wood:    WoodCardFront(player: player)
     case .vintage: VintageCardFront(player: player)
+    case .allStar: AllStarCardFront(player: player)
     }
 }
 
@@ -84,6 +87,7 @@ func cardBackView(_ template: CardTemplateID, player: Player) -> some View {
     case .classic: ClassicCardBack(player: player)
     case .wood:    WoodCardBack(player: player)
     case .vintage: VintageCardBack(player: player)
+    case .allStar: AllStarCardBack(player: player)
     }
 }
 
