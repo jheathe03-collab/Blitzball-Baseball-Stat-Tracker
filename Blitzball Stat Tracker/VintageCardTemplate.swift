@@ -43,6 +43,12 @@ struct VintageCardFront: View {
     let player: Player
     private var batting: BattingStats { player.careerBatting }
 
+    /// First word / the rest of the name, for the two-line (first over last) name plate.
+    private var nameParts: (first: String, last: String) {
+        let parts = player.name.split(separator: " ", maxSplits: 1).map(String.init)
+        return parts.count == 2 ? (parts[0], parts[1]) : (player.name, "")
+    }
+
     var body: some View {
         ZStack {
             PaperBackground()
@@ -79,7 +85,7 @@ struct VintageCardFront: View {
     }
 
     private var teamCircle: some View {
-        TeamLogoView(team: player.teams.first, size: 95)
+        TeamLogoView(team: player.teams.first, size: 110)
             .padding(7)
             .background(Circle().fill(VintagePalette.cream))
             .overlay(Circle().stroke(VintagePalette.green, lineWidth: 2.5))
@@ -98,7 +104,7 @@ struct VintageCardFront: View {
                 HStack {
                     Spacer(minLength: 0)
                     Text((player.teams.first?.name ?? "").uppercased())
-                        .font(.subheadline.weight(.black))
+                        .font(.title3.weight(.black))
                         .foregroundStyle(VintagePalette.yellow)
                         .lineLimit(1).minimumScaleFactor(0.6)
                 }
@@ -109,15 +115,22 @@ struct VintageCardFront: View {
 
     /// Cream name plate: player name (green) over number (black), right-aligned.
     private var nameBox: some View {
-        VStack(alignment: .trailing, spacing: 1) {
-            Text(player.name.uppercased())
-                .font(.subheadline.weight(.black))
+        VStack(alignment: .trailing, spacing: 0) {
+            Text(nameParts.first.uppercased())
+                .font(.title3.weight(.black))
                 .foregroundStyle(VintagePalette.green)
                 .lineLimit(1).minimumScaleFactor(0.5)
+            if !nameParts.last.isEmpty {
+                Text(nameParts.last.uppercased())
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(VintagePalette.green)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+            }
             if let number = player.jerseyNumber {
                 Text("#\(number)")
                     .font(.caption.bold().monospacedDigit())
                     .foregroundStyle(VintagePalette.ink)
+                    .padding(.top, 1)
             }
         }
         .frame(width: 150, alignment: .trailing)
