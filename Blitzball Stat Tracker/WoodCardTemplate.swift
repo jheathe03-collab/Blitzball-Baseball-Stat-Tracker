@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 private enum WoodPalette {
     static let wood     = Color(red: 0.82, green: 0.64, blue: 0.40)
@@ -45,6 +46,28 @@ private struct Diamond: Shape {
     }
 }
 
+/// A single diagonal line across a box's top-left corner (bottom-left → top-right).
+private struct CornerDiagonal: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        return p
+    }
+}
+
+/// The card background: the real "WoodGrain" image asset if it's been added, otherwise a faked
+/// wood-tone gradient so the layout still looks right.
+private struct WoodBackground: View {
+    var body: some View {
+        if let ui = UIImage(named: "WoodGrain") {
+            Image(uiImage: ui).resizable().scaledToFill()
+        } else {
+            WoodPalette.grain
+        }
+    }
+}
+
 // MARK: - Front
 
 struct WoodCardFront: View {
@@ -53,15 +76,13 @@ struct WoodCardFront: View {
 
     var body: some View {
         ZStack {
-            WoodPalette.grain
-            VStack(spacing: 8) {
-                photoFrame
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(alignment: .topLeading) { teamCircle.padding(6) }
-                    .overlay(alignment: .topTrailing) { blitzDiamond.padding(6) }
-                bottomRow
-            }
-            .padding(14)
+            WoodBackground()
+            photoFrame
+                .overlay(alignment: .topLeading) { cornerBadge }
+                .overlay(alignment: .topTrailing) { blitzDiamond.padding(7) }
+                .overlay(alignment: .bottomLeading) { avgBox.padding([.leading, .bottom], 10) }
+                .overlay(alignment: .bottomTrailing) { nameBox.padding(.trailing, 10).padding(.bottom, -6) }
+                .padding(14)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(WoodPalette.woodDark, lineWidth: 1))
@@ -70,6 +91,7 @@ struct WoodCardFront: View {
     /// Photo with a white inner line inside a black outer line (nested rounded backgrounds).
     private var photoFrame: some View {
         PlayerPortrait(player: player)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .padding(3)
             .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(.white))
@@ -93,11 +115,13 @@ struct WoodCardFront: View {
         .frame(width: 46, height: 46)
     }
 
-    private var bottomRow: some View {
-        HStack(spacing: 8) {
-            avgBox
-            nameBox
+    /// Team logo in a circle sitting over a diagonal cut at the photo's top-left corner.
+    private var cornerBadge: some View {
+        ZStack {
+            CornerDiagonal().stroke(.black, lineWidth: 2).frame(width: 50, height: 50)
+            teamCircle
         }
+        .padding(5)
     }
 
     private var avgBox: some View {
@@ -117,8 +141,7 @@ struct WoodCardFront: View {
             .font(.subheadline.weight(.black))
             .foregroundStyle(.white)
             .lineLimit(1).minimumScaleFactor(0.5)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            .padding(.horizontal, 14).padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 6).fill(WoodPalette.red))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(.black, lineWidth: 1))
     }
@@ -134,7 +157,7 @@ struct WoodCardBack: View {
 
     var body: some View {
         ZStack {
-            WoodPalette.grain
+            WoodBackground()
             content
                 .padding(14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
