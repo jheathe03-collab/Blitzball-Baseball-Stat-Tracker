@@ -60,10 +60,18 @@ private struct CornerDiagonal: Shape {
 /// wood-tone gradient so the layout still looks right.
 private struct WoodBackground: View {
     var body: some View {
-        if let ui = UIImage(named: "WoodGrain") {
-            Image(uiImage: ui).resizable().scaledToFill()
-        } else {
-            WoodPalette.grain
+        // GeometryReader gives the image a definite box to fill+clip, so the large JPEG can't drag
+        // the card's layout toward its own aspect ratio (same fix as the player portrait).
+        GeometryReader { geo in
+            if let ui = UIImage(named: "WoodGrain") {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+            } else {
+                WoodPalette.grain
+            }
         }
     }
 }
