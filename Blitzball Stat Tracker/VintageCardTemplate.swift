@@ -65,9 +65,11 @@ struct VintageCardFront: View {
                 .frame(height: 96)
                 .overlay(alignment: .topLeading) { teamCircle.offset(x: 4, y: -33) }
         }
-        .padding(3)
+        // Clip the content to the frame shape so the photo and crimson fill right up to the green
+        // frame (no paper gap), then stroke the same shape as the frame line.
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .stroke(VintagePalette.green, lineWidth: 3)
         )
     }
@@ -77,7 +79,7 @@ struct VintageCardFront: View {
     }
 
     private var teamCircle: some View {
-        TeamLogoView(team: player.teams.first, size: 110)
+        TeamLogoView(team: player.teams.first, size: 95)
             .padding(7)
             .background(Circle().fill(VintagePalette.cream))
             .overlay(Circle().stroke(VintagePalette.green, lineWidth: 2.5))
@@ -121,6 +123,7 @@ struct VintageCardFront: View {
         .frame(width: 150, alignment: .trailing)
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(VintagePalette.cream))
+        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(VintagePalette.green, lineWidth: 2.5))
     }
 }
 
