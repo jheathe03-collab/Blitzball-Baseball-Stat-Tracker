@@ -33,19 +33,6 @@ private enum WoodPalette {
     }
 }
 
-/// A rhombus (rotated-square) used for the blitzball logo badge.
-private struct Diamond: Shape {
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        p.move(to: CGPoint(x: rect.midX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
-        p.closeSubpath()
-        return p
-    }
-}
-
 /// A rounded card whose TOP-LEFT corner is cut off by a diagonal chamfer (the photo is clipped to
 /// this, so wood shows through the cut and the team-logo circle sits in the notch).
 private struct DiagonalCornerCard: Shape {
@@ -103,7 +90,7 @@ struct WoodCardFront: View {
             WoodBackground()
             photoFrame
                 .overlay(alignment: .topLeading) { teamCircle.padding(3) }
-                .overlay(alignment: .topTrailing) { blitzDiamond.padding(7) }
+                .overlay(alignment: .topTrailing) { blitzLogo.padding(9) }
                 .overlay(alignment: .bottomLeading) { avgBox.padding([.leading, .bottom], 10) }
                 .overlay(alignment: .bottomTrailing) { nameBox.padding(.trailing, 10).padding(.bottom, -6) }
                 .padding(14)
@@ -115,7 +102,7 @@ struct WoodCardFront: View {
     /// Photo clipped to the notched card shape (diagonal top-left corner), with a white inner line
     /// inside a black outer line that follow the same shape so the diagonal is bordered too.
     private var photoFrame: some View {
-        let shape = DiagonalCornerCard(cornerRadius: 9, notch: 54)
+        let shape = DiagonalCornerCard(cornerRadius: 9, notch: 62)
         return PlayerPortrait(player: player)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipShape(shape)
@@ -126,19 +113,17 @@ struct WoodCardFront: View {
     }
 
     private var teamCircle: some View {
-        TeamLogoView(team: player.teams.first, size: 42)
-            .padding(4)
-            .background(Circle().fill(.white))
+        TeamLogoView(team: player.teams.first, size: 52)
+            .padding(5)
+            .background(Circle().fill(WoodPalette.red))
             .overlay(Circle().stroke(.black, lineWidth: 1.5))
     }
 
-    private var blitzDiamond: some View {
-        ZStack {
-            Diamond().fill(.white)
-            Diamond().stroke(.black, lineWidth: 1.5)
-            Image("BlitzBalllogo").resizable().scaledToFit().frame(width: 22, height: 22)
-        }
-        .frame(width: 46, height: 46)
+    /// Just the blitzball logo in the top-right corner (no diamond frame).
+    private var blitzLogo: some View {
+        Image("BlitzBalllogo")
+            .resizable().scaledToFit()
+            .frame(width: 46, height: 46)
     }
 
     private var avgBox: some View {
