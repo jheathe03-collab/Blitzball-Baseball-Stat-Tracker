@@ -14,12 +14,14 @@ import SwiftUI
 /// Identifies a card design. Add a case (+ its views) to introduce a new template.
 enum CardTemplateID: String, CaseIterable, Identifiable {
     case classic
+    case wood
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
         case .classic: return "Classic"
+        case .wood:    return "Woodgrain"
         }
     }
 }
@@ -30,6 +32,7 @@ enum CardTemplateID: String, CaseIterable, Identifiable {
 func cardFrontView(_ template: CardTemplateID, player: Player) -> some View {
     switch template {
     case .classic: ClassicCardFront(player: player)
+    case .wood:    WoodCardFront(player: player)
     }
 }
 
@@ -37,6 +40,7 @@ func cardFrontView(_ template: CardTemplateID, player: Player) -> some View {
 func cardBackView(_ template: CardTemplateID, player: Player) -> some View {
     switch template {
     case .classic: ClassicCardBack(player: player)
+    case .wood:    WoodCardBack(player: player)
     }
 }
 
