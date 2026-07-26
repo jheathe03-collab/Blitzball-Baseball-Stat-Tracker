@@ -61,6 +61,7 @@ struct SeasonStatsDetailView: View {
 
     @State private var exportFile: CSVExportFile?
     @State private var exportError: String?
+    @State private var confirmingSeasonPhotos = false
 
     var body: some View {
         List {
@@ -79,7 +80,7 @@ struct SeasonStatsDetailView: View {
                     Button(action: exportCSV) {
                         Label("Spreadsheet (CSV)", systemImage: "tablecells")
                     }
-                    Button(action: exportSeasonFile) {
+                    Button(action: beginSeasonExport) {
                         Label("Season File (.json)", systemImage: "square.and.arrow.up.on.square")
                     }
                 } label: {
@@ -94,6 +95,13 @@ struct SeasonStatsDetailView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(exportError ?? "")
+        }
+        .confirmationDialog("Include player photos?", isPresented: $confirmingSeasonPhotos, titleVisibility: .visible) {
+            Button("Include Photos") { exportSeasonFile(includePhotos: true) }
+            Button("Without Photos (smaller file)") { exportSeasonFile(includePhotos: false) }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Photos make the file larger to share. Skip them and each device keeps its own player photos.")
         }
     }
 
@@ -111,11 +119,28 @@ struct SeasonStatsDetailView: View {
         }
     }
 
+    /// Ask about photos first only when the season actually has any; otherwise export straight away.
+    private func beginSeasonExport() {
+        if seasonHasPhotos { confirmingSeasonPhotos = true }
+        else { exportSeasonFile(includePhotos: false) }
+    }
+
+    /// Whether any player in this season has a card photo (drives the include-photos prompt).
+    private var seasonHasPhotos: Bool {
+        for game in season.games {
+            for player in (game.homeTeam?.players ?? []) + (game.awayTeam?.players ?? [])
+            where player.photoData != nil { return true }
+            for line in game.statLines where line.player?.photoData != nil { return true }
+        }
+        return false
+    }
+
     /// Export the full season as a portable archive file (move it to another device, then Import Season).
-    private func exportSeasonFile() {
+    private func exportSeasonFile(includePhotos: Bool) {
         do {
             let base = season.name.isEmpty ? "Season" : season.name
-            let url = try SeasonArchive(exporting: season).writeTempFile(seasonName: base)
+            let url = try SeasonArchive(exporting: season, includePhotos: includePhotos)
+                .writeTempFile(seasonName: base)
             exportFile = CSVExportFile(url: url)
         } catch {
             exportError = error.localizedDescription

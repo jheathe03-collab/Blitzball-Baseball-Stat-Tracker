@@ -19,6 +19,7 @@ struct ExportPlayersView: View {
     // Non-nil once files are written — drives the share sheet.
     @State private var shareBundle: ShareBundle?
     @State private var exportError: String?
+    @State private var confirmingPhotoExport = false
 
     /// Only players with finished-game history can be exported (an empty archive is pointless).
     private var eligible: [Player] { players.filter { !$0.finalStatLines.isEmpty } }
@@ -51,7 +52,7 @@ struct ExportPlayersView: View {
                 }
                 ToolbarItem(placement: .bottomBar) {
                     Button {
-                        exportSelected()
+                        beginExport()
                     } label: {
                         Label(
                             selectedCount == 0 ? "Export" : "Export \(selectedCount) Player\(selectedCount == 1 ? "" : "s")",
@@ -71,6 +72,13 @@ struct ExportPlayersView: View {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(exportError ?? "")
+            }
+            .confirmationDialog("Include player photos?", isPresented: $confirmingPhotoExport, titleVisibility: .visible) {
+                Button("Include Photos") { exportSelected(includePhotos: true) }
+                Button("Without Photos (smaller files)") { exportSelected(includePhotos: false) }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Photos make the files larger to share.")
             }
         }
     }
@@ -138,13 +146,22 @@ struct ExportPlayersView: View {
         Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
     }
 
+    /// Ask about photos only when a selected player actually has one; otherwise export straight away.
+    private func beginExport() {
+        let anyPhotos = eligible.contains {
+            selected.contains($0.persistentModelID) && $0.photoData != nil
+        }
+        if anyPhotos { confirmingPhotoExport = true }
+        else { exportSelected(includePhotos: false) }
+    }
+
     /// Write one JSON file per selected player into a temp folder, then present the share sheet.
-    private func exportSelected() {
+    private func exportSelected(includePhotos: Bool) {
         do {
             var urls: [URL] = []
             var usedNames: Set<String> = []
             for player in eligible where selected.contains(player.persistentModelID) {
-                let data = try PlayerArchive(exporting: player).encoded()
+                let data = try PlayerArchive(exporting: player, includePhotos: includePhotos).encoded()
                 let name = uniqueFilename(for: player, used: &usedNames)
                 let url = URL.temporaryDirectory.appending(path: name)
                 try data.write(to: url, options: .atomic)

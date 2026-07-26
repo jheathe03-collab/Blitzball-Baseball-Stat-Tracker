@@ -47,6 +47,10 @@ struct SeasonArchive: Codable {
         // (Swift's synthesized Codable uses decodeIfPresent for Optional fields). Default keeps
         // the memberwise init source-compatible with older call sites.
         var battingStance: String? = nil
+        // The card portrait (base64 in JSON). Optional so older/photo-less archives still decode.
+        var photoData: Data? = nil
+        // The chosen card-template id. Optional so older archives still decode.
+        var cardTemplate: String? = nil
     }
 
     struct TeamDTO: Codable {
@@ -134,7 +138,7 @@ extension SeasonArchive {
 // MARK: - Export (read-only)
 
 extension SeasonArchive {
-    init(exporting season: Season) {
+    init(exporting season: Season, includePhotos: Bool = true) {
         format = Self.currentFormat
         version = Self.currentVersion
         exportedAt = .now
@@ -172,7 +176,9 @@ extension SeasonArchive {
 
         players = playerList.map {
             PlayerDTO(name: $0.name, jerseyNumber: $0.jerseyNumber, dateAdded: $0.dateAdded,
-                      battingStance: $0.battingStance)
+                      battingStance: $0.battingStance,
+                      photoData: includePhotos ? $0.photoData : nil,
+                      cardTemplate: $0.cardTemplate)
         }
         teams = teamList.map {
             TeamDTO(name: $0.name, logoName: $0.logoName, logoImageData: $0.logoImageData,
@@ -316,10 +322,13 @@ extension SeasonArchive {
                 // Non-destructively backfill missing profile fields from the archive (matches how
                 // PlayerArchive.apply merges — never overwrites what the device already has).
                 if existing.battingStance == nil { existing.battingStance = dto.battingStance }
+                if existing.photoData == nil { existing.photoData = dto.photoData }
+                if existing.cardTemplate == nil { existing.cardTemplate = dto.cardTemplate }
                 playerMap[dto.name] = existing
             } else {
                 let p = Player(name: dto.name, jerseyNumber: dto.jerseyNumber,
-                               battingStance: dto.battingStance, dateAdded: dto.dateAdded)
+                               battingStance: dto.battingStance, photoData: dto.photoData,
+                               cardTemplate: dto.cardTemplate, dateAdded: dto.dateAdded)
                 context.insert(p)
                 playerMap[dto.name] = p
             }
