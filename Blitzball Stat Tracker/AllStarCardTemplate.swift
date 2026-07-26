@@ -12,7 +12,7 @@ import SwiftUI
 import UIKit
 
 private enum OrangePalette {
-    static let orange     = Color(red: 0.87, green: 0.28, blue: 0.16)   // bold box orange-red
+    static let orange     = Color(red: 0.859, green: 0.361, blue: 0.294)  // #db5c4b — text blocks
     static let orangeDark = Color(red: 0.68, green: 0.20, blue: 0.10)
     static let orangeLite = Color(red: 0.97, green: 0.55, blue: 0.28)   // background fallback
     static let cream      = Color(red: 0.97, green: 0.94, blue: 0.86)
