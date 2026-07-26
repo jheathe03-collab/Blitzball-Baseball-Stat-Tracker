@@ -119,8 +119,8 @@ struct AllStarCardFront: View {
     }
 
     private var logoBox: some View {
-        TeamLogoView(team: player.teams.first, size: 30)
-            .padding(4)
+        TeamLogoView(team: player.teams.first, size: 42)
+            .padding(2)
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(OrangePalette.cream))
             .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(.black, lineWidth: 1))
     }
