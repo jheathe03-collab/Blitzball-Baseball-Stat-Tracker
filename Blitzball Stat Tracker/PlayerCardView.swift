@@ -20,6 +20,7 @@ struct PlayerCardView: View {
     // A freshly picked photo waiting to be framed in the crop screen.
     @State private var pendingCrop: PendingCrop?
     @State private var choosingTemplate = false
+    @State private var confirmingPhotoRemoval = false
 
     /// The player's chosen card template (falls back to Classic).
     private var template: CardTemplateID {
@@ -62,6 +63,19 @@ struct PlayerCardView: View {
                         .buttonStyle(.bordered)
                         .tint(.white)
 
+                        // Only offered once there's a photo to remove.
+                        if player.photoData != nil {
+                            Button {
+                                confirmingPhotoRemoval = true
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.subheadline.bold())
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.red)
+                            .accessibilityLabel("Remove Photo")
+                        }
+
                         Button {
                             choosingTemplate = true
                         } label: {
@@ -95,6 +109,12 @@ struct PlayerCardView: View {
         }
         .sheet(isPresented: $choosingTemplate) {
             CardTemplatePicker(player: player)
+        }
+        .alert("Remove Photo?", isPresented: $confirmingPhotoRemoval) {
+            Button("Remove Photo", role: .destructive) { player.photoData = nil }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("\(player.name)'s card will show the placeholder until you add another photo. Their stats aren't affected.")
         }
     }
 
