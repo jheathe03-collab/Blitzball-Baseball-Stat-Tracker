@@ -118,10 +118,10 @@ struct GoldStandardCardFront: View {
                 .foregroundStyle(GoldPalette.ink)
                 .lineLimit(1).minimumScaleFactor(0.4)
             Spacer(minLength: 4)
-            TeamLogoView(team: player.teams.first, size: 42)
+            TeamLogoView(team: player.teams.first, size: 58)
         }
         .padding(.horizontal, 6)
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
 }
 
