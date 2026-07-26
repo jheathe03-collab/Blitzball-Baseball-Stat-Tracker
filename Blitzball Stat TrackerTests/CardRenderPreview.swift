@@ -28,8 +28,9 @@ final class CardRenderPreview: XCTestCase {
         ctx.insert(team)
         player.photoData = Self.samplePhoto()
 
-        attach(AllStarCardFront(player: player), name: "allstar_front")
-        attach(AllStarCardBack(player: player), name: "allstar_back")
+        attach(GoldStandardCardFront(player: player), name: "gold_front")
+        attach(GoldStandardCardBack(player: player), name: "gold_back")
+        attachZoom(GoldStandardCardFront(player: player), name: "gold_zoom_bottom")
     }
 
     @MainActor
@@ -38,6 +39,23 @@ final class CardRenderPreview: XCTestCase {
         let renderer = ImageRenderer(content: framed)
         renderer.scale = 2
         guard let ui = renderer.uiImage else { XCTFail("render failed for \(name)"); return }
+        let attachment = XCTAttachment(image: ui)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    /// Renders a zoomed-in view of the card's BOTTOM, for inspecting fine detail (curves, framing).
+    @MainActor
+    private func attachZoom<V: View>(_ view: V, name: String) {
+        let zoomed = view
+            .frame(width: CardMetrics.nativeWidth, height: CardMetrics.nativeHeight)
+            .scaleEffect(2.6, anchor: .bottom)
+            .frame(width: CardMetrics.nativeWidth, height: 300)
+            .clipped()
+        let renderer = ImageRenderer(content: zoomed)
+        renderer.scale = 2
+        guard let ui = renderer.uiImage else { XCTFail("zoom render failed"); return }
         let attachment = XCTAttachment(image: ui)
         attachment.name = name
         attachment.lifetime = .keepAlways
