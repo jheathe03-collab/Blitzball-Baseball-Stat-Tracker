@@ -106,10 +106,12 @@ struct AllStarCardFront: View {
     }
 
     /// Player name rotated to fill a vertical column (rotate around top-leading + offset to reposition).
+    ///
+    /// .font(.custom("Futura-Bold"
     private var verticalName: some View {
         GeometryReader { geo in
             Text(player.name.uppercased())
-                .font(.system(size: 90, weight: .black))   // large; scales down to fill the column
+                .font(.custom("Futura-Bold", size: 90))   // large; scales down to fill the column
                 .foregroundStyle(OrangePalette.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.05)
