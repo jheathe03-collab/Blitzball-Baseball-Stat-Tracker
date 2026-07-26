@@ -206,9 +206,7 @@ private struct LeaderCard: View, Identifiable {
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.5))
                             .frame(width: 16, alignment: .leading)
-                        if let team = row.team {
-                            TeamLogoView(team: team, size: 22)
-                        }
+                        TeamLogoView(team: row.team, size: 22)
                         Text(row.name).lineLimit(1)
                         Spacer()
                         Text(row.value)

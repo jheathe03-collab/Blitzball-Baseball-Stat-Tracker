@@ -121,11 +121,10 @@ struct AllStarCardFront: View {
         }
     }
 
+    /// Just the icon — no plate behind it. A soft shadow keeps it readable over a light photo.
     private var logoBox: some View {
-        TeamLogoView(team: player.teams.first, size: 42)
-            .padding(2)
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(OrangePalette.cream))
-            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(.black, lineWidth: 1))
+        TeamLogoView(team: player.teams.first, size: 48)
+            .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
     }
 
     private var eraBox: some View {
