@@ -28,9 +28,9 @@ final class CardRenderPreview: XCTestCase {
         ctx.insert(team)
         player.photoData = Self.samplePhoto()
 
-        attach(GoldStandardCardFront(player: player), name: "gold_front")
-        attach(GoldStandardCardBack(player: player), name: "gold_back")
-        attachZoom(GoldStandardCardFront(player: player), name: "gold_zoom_bottom")
+        attach(RetroStripeCardFront(player: player), name: "retro_front")
+        attach(RetroStripeCardBack(player: player), name: "retro_back")
+        attachZoom(RetroStripeCardFront(player: player), name: "retro_zoom_bottom")
     }
 
     @MainActor
@@ -65,7 +65,7 @@ final class CardRenderPreview: XCTestCase {
     /// A stand-in portrait so the photo area isn't just a placeholder.
     private static func samplePhoto() -> Data {
         UIGraphicsImageRenderer(size: CGSize(width: 240, height: 320)).image { c in
-            UIColor(red: 0.28, green: 0.42, blue: 0.66, alpha: 1).setFill()
+            UIColor(red: 0.55, green: 0.50, blue: 0.38, alpha: 1).setFill()   // distinct from card colors
             c.fill(CGRect(x: 0, y: 0, width: 240, height: 320))
         }.jpegData(compressionQuality: 0.85)!
     }
