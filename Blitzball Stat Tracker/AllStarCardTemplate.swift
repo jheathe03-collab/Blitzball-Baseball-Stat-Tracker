@@ -13,6 +13,7 @@ import UIKit
 
 private enum OrangePalette {
     static let orange     = Color(red: 0.859, green: 0.361, blue: 0.294)  // #db5c4b — text blocks
+    static let text       = Color(red: 0.949, green: 0.945, blue: 0.929)  // #f2f1ed — block text
     static let orangeDark = Color(red: 0.68, green: 0.20, blue: 0.10)
     static let orangeLite = Color(red: 0.97, green: 0.55, blue: 0.28)   // background fallback
     static let cream      = Color(red: 0.97, green: 0.94, blue: 0.86)
@@ -69,7 +70,7 @@ struct AllStarCardFront: View {
             }
         }
         .font(.headline.weight(.black))
-        .foregroundStyle(.white)
+        .foregroundStyle(OrangePalette.text)
         .padding(.horizontal, 12).padding(.vertical, 7)
         .frame(maxWidth: .infinity)
         .background(OrangePalette.orange)
@@ -108,7 +109,7 @@ struct AllStarCardFront: View {
         GeometryReader { geo in
             Text(player.name.uppercased())
                 .font(.system(size: 90, weight: .black))   // large; scales down to fill the column
-                .foregroundStyle(.white)
+                .foregroundStyle(OrangePalette.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.05)
                 .frame(width: geo.size.height, height: geo.size.width)
