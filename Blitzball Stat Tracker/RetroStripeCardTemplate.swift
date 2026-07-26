@@ -47,13 +47,43 @@ private struct BlueStripeBackground: View {
     }
 }
 
+/// A rectangle whose BOTTOM edge is cut on a diagonal — used to end the photo exactly along the
+/// name band's accent stripe. `bottomInset` is the distance from the bottom at the horizontal
+/// centre; `tilt` matches the band's rotation so the two edges coincide.
+private struct DiagonalBottomShape: Shape {
+    var bottomInset: CGFloat
+    var tilt: Double
+
+    func path(in rect: CGRect) -> Path {
+        let dy = CGFloat(tan(tilt * .pi / 180)) * (rect.width / 2)
+        let centreY = rect.maxY - bottomInset
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: centreY + dy))   // right end of the cut
+        p.addLine(to: CGPoint(x: rect.minX, y: centreY - dy))   // left end of the cut
+        p.closeSubpath()
+        return p
+    }
+}
+
 // MARK: - Front
 
 struct RetroStripeCardFront: View {
     let player: Player
 
-    /// The band's tilt, shared by the bar and its text so they stay locked together.
+    /// The band's tilt, shared by the bar, its text, and the photo's diagonal cut.
     private let tilt: Double = -4
+    // Band geometry — the photo's cut is derived from these so it lands on the accent stripe.
+    private let bandFrameHeight: CGFloat = 50
+    private let bandBottomPadding: CGFloat = 26
+    private let barHeight: CGFloat = 34
+    private let accentHeight: CGFloat = 8
+
+    /// Distance from the photo's bottom up to the accent stripe's lower edge (at the centre).
+    private var photoCutInset: CGFloat {
+        bandBottomPadding + (bandFrameHeight - (barHeight + accentHeight)) / 2
+    }
 
     var body: some View {
         ZStack {
@@ -67,16 +97,16 @@ struct RetroStripeCardFront: View {
     }
 
     private var photoArea: some View {
-        PlayerPortrait(player: player)
+        let cut = DiagonalBottomShape(bottomInset: photoCutInset, tilt: tilt)
+        return PlayerPortrait(player: player)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            // The photo ends on the diagonal, so below the accent stripe you see the striped border.
+            .clipShape(cut)
+            .overlay(cut.stroke(RetroPalette.ink.opacity(0.55), lineWidth: 1))
             .overlay(alignment: .topLeading) { teamTab.padding(.leading, 6).padding(.top, 6) }
             .overlay(alignment: .bottom) { nameBand }
-            // Sits just above the diagonal band (which occupies ~26–76pt off the bottom).
+            // Sits just above the diagonal band.
             .overlay(alignment: .bottomLeading) { teamLogo.padding(.leading, 10).padding(.bottom, 74) }
-            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .stroke(RetroPalette.ink.opacity(0.55), lineWidth: 1))
     }
 
     /// Red tab at the top-left carrying the team name.
@@ -107,8 +137,8 @@ struct RetroStripeCardFront: View {
             ZStack {
                 // Red bar with the thin accent stripe directly beneath it, tilted together.
                 VStack(spacing: 0) {
-                    Rectangle().fill(RetroPalette.red).frame(height: 34)
-                    Rectangle().fill(RetroPalette.accent).frame(height: 8)
+                    Rectangle().fill(RetroPalette.red).frame(height: barHeight)
+                    Rectangle().fill(RetroPalette.accent).frame(height: accentHeight)
                 }
                 .frame(width: barW)
                 .rotationEffect(.degrees(tilt))
@@ -129,12 +159,12 @@ struct RetroStripeCardFront: View {
                 .padding(.leading, 18)
                 .frame(width: geo.size.width)
                 .rotationEffect(.degrees(tilt))
-                .offset(y: -4)
+                .offset(y: -accentHeight / 2)
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
-        .frame(height: 50)
-        .padding(.bottom, 26)
+        .frame(height: bandFrameHeight)
+        .padding(.bottom, bandBottomPadding)
     }
 }
 
