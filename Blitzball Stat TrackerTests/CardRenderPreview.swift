@@ -28,8 +28,8 @@ final class CardRenderPreview: XCTestCase {
         ctx.insert(team)
         player.photoData = Self.samplePhoto()
 
-        attach(AllStarCardFront(player: player), name: "allstar_front")
-        attachZoom(AllStarCardFront(player: player), name: "allstar_zoom_bottom")
+        attach(RetroStripeCardFront(player: player), name: "retro_front")
+        attachZoom(RetroStripeCardFront(player: player), name: "retro_zoom_bottom")
     }
 
     @MainActor

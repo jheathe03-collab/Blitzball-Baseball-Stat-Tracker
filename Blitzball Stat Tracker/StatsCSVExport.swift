@@ -140,6 +140,110 @@ enum StatsCSV {
         return encode(rows)
     }
 
+    /// ONE game's box score: the line score plus both teams' batting and pitching. This is the
+    /// "share tonight's game with the team" export — season/all-teams exports are unaffected.
+    static func gameCSV(_ game: Game) -> String {
+        var rows: [[String]] = []
+        let df = DateFormatter(); df.dateStyle = .medium
+        let home = game.homeTeam?.name ?? "Home"
+        let away = game.awayTeam?.name ?? "Away"
+
+        rows.append(["Blitzball — Game: \(away) at \(home)"])
+        rows.append(["Generated: \(df.string(from: .now))"])
+        rows.append(["Played: \(df.string(from: game.createdAt))"])
+        rows.append(["Type: \(gameContext(game))"])
+        rows.append(["Final: \(away) \(game.awayScore), \(home) \(game.homeScore)"])
+        rows.append([])
+
+        // Line score — away on top, the way a scoreboard reads.
+        let innings = max(game.awayInningRuns.count, game.homeInningRuns.count, 1)
+        rows.append(["LINE SCORE"])
+        rows.append(["Team"] + (1...innings).map { "\($0)" } + ["R", "H", "E"])
+        rows.append(lineScoreRow(name: away, runs: game.awayInningRuns, innings: innings,
+                                 total: game.awayScore, hits: game.hits(isHome: false)))
+        rows.append(lineScoreRow(name: home, runs: game.homeInningRuns, innings: innings,
+                                 total: game.homeScore, hits: game.hits(isHome: true)))
+        rows.append([])
+
+        // Both teams, away first to match the line score above.
+        for isHome in [false, true] {
+            let teamName = isHome ? home : away
+            let lines = game.statLines
+                .filter { $0.isHome == isHome && !$0.isDH }
+                .sorted { $0.battingOrder < $1.battingOrder }
+
+            rows.append(["\(teamName) — BATTING"])
+            rows.append(["Player"] + battingHeaders)
+            var teamBatting = BattingStats()
+            for line in lines {
+                teamBatting = teamBatting + line.batting
+                rows.append([line.player?.name ?? "—"] + battingRow(line.batting))
+            }
+            rows.append(["TEAM"] + battingRow(teamBatting))
+            rows.append([])
+
+            let pitchers = lines.filter { $0.pitching.outsRecorded > 0 }
+            rows.append(["\(teamName) — PITCHING"])
+            rows.append(["Pitcher"] + pitchingHeaders)
+            if pitchers.isEmpty {
+                rows.append(["No pitching recorded for this team."])
+            } else {
+                var teamPitching = PitchingStats()
+                for line in pitchers {
+                    teamPitching = teamPitching + line.pitching
+                    rows.append([line.player?.name ?? "—"] + pitchingRow(line.pitching))
+                }
+                rows.append(["TEAM"] + pitchingRow(teamPitching))
+            }
+            rows.append([])
+        }
+
+        // The neutral DH bats for both sides, so its line is personal — listed on its own.
+        let dhLines = game.statLines.filter { $0.isDH }
+        if !dhLines.isEmpty {
+            rows.append(["DESIGNATED HITTER — BATTING"])
+            rows.append(["Player"] + battingHeaders)
+            for line in dhLines {
+                rows.append([line.player?.name ?? "—"] + battingRow(line.batting))
+            }
+            let dhPitchers = dhLines.filter { $0.pitching.outsRecorded > 0 }
+            if !dhPitchers.isEmpty {
+                rows.append([])
+                rows.append(["DESIGNATED HITTER — PITCHING"])
+                rows.append(["Pitcher"] + pitchingHeaders)
+                for line in dhPitchers {
+                    rows.append([line.player?.name ?? "—"] + pitchingRow(line.pitching))
+                }
+            }
+        }
+
+        return encode(rows)
+    }
+
+    /// Where this game came from: "Season: Summer — Week 2", "Cup — Quarterfinals", "Exhibition".
+    private static func gameContext(_ game: Game) -> String {
+        switch game.mode {
+        case .season:
+            let name = game.season?.name ?? ""
+            let label = name.isEmpty ? "Season" : "Season: \(name)"
+            return "\(label) — Week \(game.weekNumber)"
+        case .tournament:
+            let name = game.tournament?.displayName ?? "Tournament"
+            let round = game.tournament?.roundName(game.bracketRound) ?? "Round \(game.bracketRound + 1)"
+            return "\(name) — \(round)"
+        case .exhibition:
+            return "Exhibition"
+        }
+    }
+
+    /// One line-score row. Innings the team never batted stay blank; errors aren't tracked yet.
+    private static func lineScoreRow(name: String, runs: [Int], innings: Int,
+                                     total: Int, hits: Int) -> [String] {
+        var row = [name]
+        for i in 0..<innings { row.append(i < runs.count ? "\(runs[i])" : "") }
+        return row + ["\(total)", "\(hits)", "0"]
+    }
+
     // MARK: - Row formatters
 
     private static func battingRow(_ b: BattingStats) -> [String] {

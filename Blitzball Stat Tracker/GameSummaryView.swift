@@ -17,6 +17,9 @@ struct GameSummaryView: View {
     /// true = home team shown, false = away.
     @State private var showingHome = true
     @Environment(Router.self) private var router
+    // Single-game CSV export (finished games only).
+    @State private var exportFile: CSVExportFile?
+    @State private var exportError: String?
 
     /// The selected team's lines, in batting order (includes subs; excludes the neutral DH).
     private var lines: [GameStatLine] {
@@ -95,6 +98,40 @@ struct GameSummaryView: View {
         }
         .navigationTitle("Game Summary")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // Share just this game's box score. Only offered once the game is final, so the
+            // numbers you send out are complete.
+            if game.status == .final {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: exportGameCSV) {
+                        Label("Export", systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
+        }
+        .sheet(item: $exportFile) { file in
+            ShareSheet(items: [file.url])
+        }
+        .alert("Export Failed", isPresented: exportErrorBinding) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(exportError ?? "")
+        }
+    }
+
+    private var exportErrorBinding: Binding<Bool> {
+        Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
+    }
+
+    /// Write this game's box score to a temp .csv and hand it to the share sheet.
+    private func exportGameCSV() {
+        do {
+            let csv = StatsCSV.gameCSV(game)
+            let base = "\(game.awayTeam?.name ?? "Away") vs \(game.homeTeam?.name ?? "Home")"
+            exportFile = CSVExportFile(url: try StatsCSV.writeTempFile(csv, baseName: base))
+        } catch {
+            exportError = error.localizedDescription
+        }
     }
 
     /// A compact final line: each team's logo + name flanking the score.

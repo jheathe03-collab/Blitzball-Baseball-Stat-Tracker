@@ -102,7 +102,8 @@ struct RetroStripeCardFront: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // The photo ends on the diagonal, so below the accent stripe you see the striped border.
             .clipShape(cut)
-            .overlay(cut.stroke(RetroPalette.ink.opacity(0.55), lineWidth: 1))
+            // Thin white border tracing the photo (including the diagonal cut).
+            .overlay(cut.stroke(.white, lineWidth: 2.5))
             .overlay(alignment: .topLeading) { teamTab.padding(.leading, 6).padding(.top, 6) }
             .overlay(alignment: .bottom) { nameBand }
             // Sits just above the diagonal band.
@@ -121,11 +122,10 @@ struct RetroStripeCardFront: View {
             .frame(maxWidth: 150, alignment: .leading)
     }
 
+    /// Just the icon — no plate behind it. A soft shadow keeps it readable over a light photo.
     private var teamLogo: some View {
-        TeamLogoView(team: player.teams.first, size: 52)
-            .padding(4)
-            .background(Circle().fill(RetroPalette.cream))
-            .overlay(Circle().stroke(.white, lineWidth: 2))
+        TeamLogoView(team: player.teams.first, size: 56)
+            .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
     }
 
     /// The signature diagonal band: a tilted red bar (with a thin accent stripe beneath) carrying the
