@@ -140,7 +140,8 @@ struct WoodCardFront: View {
 
     private var nameBox: some View {
         Text(player.name.uppercased())
-            .font(.subheadline.weight(.black))
+            .font(CustomFont.dsaccent(12))
+            .font(.headline.weight(.black))
             .foregroundStyle(.white)
             .lineLimit(1).minimumScaleFactor(0.5)
             .padding(.horizontal, 14).padding(.vertical, 8)

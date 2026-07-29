@@ -63,7 +63,7 @@ struct AllStarCardFront: View {
     private var topBox: some View {
         HStack(spacing: 6) {
             Text((player.teams.first?.name ?? "").uppercased())
-                .font(.custom("Futura-Bold", size: 18))
+                .font(.custom("Helvetica Neue Condensed Bold", size: 18))
                 .lineLimit(1).minimumScaleFactor(0.5)
             Spacer(minLength: 4)
             if let number = player.jerseyNumber {

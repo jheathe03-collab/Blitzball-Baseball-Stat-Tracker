@@ -21,6 +21,71 @@ enum CardMetrics {
     static var nativeHeight: CGFloat { nativeWidth * ratio }
 }
 
+/// Templates whose frame is a hand-drawn image pull that art apart pixel by pixel the first time a
+/// card is shown (see `RibbonArt`, `TacoArt`). Each result is cached in a `static let` and reused
+/// forever, but that first pass is not free — and it happens on whichever thread asks first, so left
+/// alone it lands as a stall the first time a card or the template picker appears.
+///
+/// Doing it up front on a background queue means the work is finished long before anyone navigates
+/// to a card. It's still lazy and thread-safe: if something does ask early it simply waits for the
+/// pass already in flight rather than starting a second one.
+///
+/// Worth knowing when judging the cost: this is heavily pixel-bound work, so an unoptimised Debug
+/// build runs it roughly 30× slower than the shipping build. Measure with `SWIFT_OPTIMIZATION_LEVEL=-O`
+/// before concluding anything is actually slow (see CardArtTimingTests).
+enum CardArtWarmUp {
+    static func begin() {
+        DispatchQueue.global(qos: .utility).async {
+            _ = RibbonArt.silhouette
+            _ = TacoArt.layers
+        }
+    }
+}
+
+/// A fixed coordinate system for templates that place elements at absolute positions.
+///
+/// Lay the design out at exactly 320×480 and scale it to whatever the card is actually drawn at, so
+/// hand-placed point values look identical on the full-screen card and in a picker tile.
+///
+/// Careful: `.frame` does NOT shrink a child that insists on being bigger, it CENTRES it. So a
+/// fixed-size element wider than 320 makes the whole design hang off both edges and knocks every
+/// absolutely-placed piece out of true. Place absolute elements with `.position`, which stays
+/// greedy, rather than a fixed `.frame` plus `.offset`.
+enum CardDesignSpace {
+    static let width = CardMetrics.nativeWidth
+    static let height = CardMetrics.nativeHeight
+
+    static func scaled<V: View>(@ViewBuilder _ content: () -> V) -> some View {
+        let view = content()
+        return GeometryReader { geo in
+            view
+                .frame(width: width, height: height)
+                .scaleEffect(geo.size.width / width, anchor: .topLeading)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+        }
+    }
+}
+
+/// Card stock: a named image asset scaled to fill, else a plain colour if it's missing.
+struct PaperBackground: View {
+    var imageName: String = "PaperTexture"
+    var fallback: Color = Color(red: 0.93, green: 0.90, blue: 0.80)
+
+    var body: some View {
+        GeometryReader { geo in
+            if let ui = UIImage(named: imageName) {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+            } else {
+                fallback
+            }
+        }
+    }
+}
+
 // MARK: - Shared portrait (used by every template)
 
 /// Renders the player's photo filling its area (or a neutral placeholder). A GeometryReader gives
@@ -58,6 +123,8 @@ enum CardTemplateID: String, CaseIterable, Identifiable {
     case allStar
     case goldStandard
     case retroStripe
+    case neon90s
+    case tacoStyle
 
     var id: String { rawValue }
 
@@ -69,6 +136,8 @@ enum CardTemplateID: String, CaseIterable, Identifiable {
         case .allStar:      return "All-Star"
         case .goldStandard: return "Gold Standard"
         case .retroStripe:  return "Retro Stripe"
+        case .neon90s:      return "Neon 90s"
+        case .tacoStyle:    return "Taco Style"
         }
     }
 }
@@ -84,6 +153,8 @@ func cardFrontView(_ template: CardTemplateID, player: Player) -> some View {
     case .allStar: AllStarCardFront(player: player)
     case .goldStandard: GoldStandardCardFront(player: player)
     case .retroStripe:  RetroStripeCardFront(player: player)
+    case .neon90s:      Neon90sCardFront(player: player)
+    case .tacoStyle:    TacoStyleCardFront(player: player)
     }
 }
 
@@ -96,6 +167,8 @@ func cardBackView(_ template: CardTemplateID, player: Player) -> some View {
     case .allStar: AllStarCardBack(player: player)
     case .goldStandard: GoldStandardCardBack(player: player)
     case .retroStripe:  RetroStripeCardBack(player: player)
+    case .neon90s:      Neon90sCardBack(player: player)
+    case .tacoStyle:    TacoStyleCardBack(player: player)
     }
 }
 

@@ -19,6 +19,10 @@ struct Blitzball_Stat_TrackerApp: App {
         UINavigationBar.appearance().standardAppearance = appearance
         UINavigationBar.appearance().scrollEdgeAppearance = appearance
         UINavigationBar.appearance().compactAppearance = appearance
+
+        // Get the card templates' artwork processing out of the way now, off the main thread, so it
+        // isn't a stall the first time a baseball card is opened.
+        CardArtWarmUp.begin()
     }
 
     var sharedModelContainer: ModelContainer = {

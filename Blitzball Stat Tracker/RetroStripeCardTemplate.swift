@@ -103,7 +103,7 @@ struct RetroStripeCardFront: View {
             // The photo ends on the diagonal, so below the accent stripe you see the striped border.
             .clipShape(cut)
             // Thin white border tracing the photo (including the diagonal cut).
-            .overlay(cut.stroke(.white, lineWidth: 2.5))
+            .overlay(cut.stroke(.white, lineWidth: 0.5))
             .overlay(alignment: .topLeading) { teamTab.padding(.leading, 6).padding(.top, 6) }
             .overlay(alignment: .bottom) { nameBand }
             // Sits just above the diagonal band.

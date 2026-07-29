@@ -89,6 +89,7 @@ struct ClassicCardFront: View {
             }
             Spacer()
             Text(player.name.uppercased())
+                .font(.custom("Apple SD Gothic Neo Bold", size: 12))
                 .font(.subheadline.weight(.black))
                 .lineLimit(1).minimumScaleFactor(0.6)
         }
