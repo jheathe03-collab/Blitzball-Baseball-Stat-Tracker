@@ -99,40 +99,20 @@ struct LiveGameView: View {
             try? await Task.sleep(for: .seconds(1.2))
             withAnimation(.easeInOut(duration: 0.4)) { showSplash = false }
         }
-        .sheet(isPresented: $showBatterPicker) {
-            LinePicker(title: "Select Batter", lines: game.battingLineup,
-                       subtitle: game.currentBatterLine.map { "Current Batter: \($0.player?.name ?? "—")" },
-                       selectedPlayer: game.currentBatterLine?.player) { line in
-                if let idx = game.battingLineup.firstIndex(where: { $0 === line }) {
-                    game.currentBatterIndex = idx
-                }
-            }
-        }
-        .sheet(isPresented: $showPitcherPicker) {
-            LinePicker(title: "Select Pitcher", lines: game.lineup(isHome: !game.battingIsHome),
-                       subtitle: game.activePitcher.map { "Current Pitcher: \($0.name)" },
-                       selectedPlayer: game.activePitcher) { line in
-                if let player = line.player { attemptPitcherChange(player) }
-            }
-        }
-        .sheet(isPresented: $showSubstitution) {
-            SubstitutionView(game: game)
-        }
-        // Credit a stolen base to any batter in the lineup (undoable).
-        .sheet(isPresented: $showStealPicker) {
-            LinePicker(title: "Stolen Base — who?", lines: game.battingLineup,
-                       subtitle: "Credit the stolen base to the baserunner.") { line in
-                perform { line.batting.stolenBases += 1 }
-            }
-        }
-        .alert("Can't Swap Pitcher", isPresented: pitcherChangeAlert, presenting: pitcherChangeError) { _ in
-            Button("Override (injury)") {
+        .modifier(LineupPickerSheets(
+            game: game,
+            showBatterPicker: $showBatterPicker,
+            showPitcherPicker: $showPitcherPicker,
+            showSubstitution: $showSubstitution,
+            showStealPicker: $showStealPicker,
+            pitcherChangeAlert: pitcherChangeAlert,
+            pitcherChangeError: pitcherChangeError,
+            onPitcherChosen: attemptPitcherChange,
+            onOverridePitcher: {
                 if let player = pendingPitcher { _ = game.changePitcher(to: player, override: true) }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: { message in
-            Text(message)
-        }
+            },
+            onSteal: { line in perform { line.batting.stolenBases += 1 } }
+        ))
         .sheet(item: $editingBase) { selection in
             BaseEditorSheet(
                 baseName: baseName(selection.index),
@@ -142,19 +122,13 @@ struct LiveGameView: View {
                 perform { game.setRunner(player, onBase: selection.index) }
             }
         }
-        .alert("End Game?", isPresented: $showEndConfirm) {
-            Button("End Game", role: .destructive) {
-                game.status = .final   // the view switches to the Game Summary
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            let unpitched = game.playersWhoHaventPitched()
-            if unpitched.isEmpty {
-                Text("This finishes the game. You can review it in the Game Summary.")
-            } else {
-                Text("These players haven't pitched yet: \(unpitched.map(\.name).joined(separator: ", ")). End the game anyway?")
-            }
-        }
+        .modifier(GameEndAlerts(
+            game: game,
+            showEndConfirm: $showEndConfirm,
+            showGameOver: $showGameOver,
+            reviewingLineScore: $reviewingLineScore,
+            gameOverMessage: gameOverMessage
+        ))
         .confirmationDialog("Who scored?", isPresented: $showRunnerChooser, titleVisibility: .visible) {
             ForEach(runnersOnBase, id: \.index) { runner in
                 Button("\(runner.player.name) — \(baseName(runner.index))") {
@@ -167,12 +141,6 @@ struct LiveGameView: View {
             RBIPicker(lineup: game.battingLineup, justBatted: game.previousBatterLine) { rbiLine in
                 perform { game.scoreRunner(onBase: run.base, rbiTo: rbiLine) }
             }
-        }
-        .alert("Game Over", isPresented: $showGameOver) {
-            Button("End Game") { game.status = .final }
-            Button("Edit Line Score") { reviewingLineScore = true }
-        } message: {
-            Text(gameOverMessage + "\n\nEnd the game, or edit the line score if you need to make corrections.")
         }
         .alert(scoringAlertTitle, isPresented: scoringPromptBinding, presenting: currentScoringPrompt) { prompt in
             Button(prompt.targetBase >= 3 ? "Yes, Scored" : "Yes") { answerHitPrompt(advanced: true) }
@@ -751,6 +719,107 @@ private struct Scoreboard: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Lineup picker sheets
+
+/// The four "pick somebody from the lineup" sheets — batter, pitcher, substitution, stolen base —
+/// plus the alert shown when a pitcher swap is rejected.
+///
+/// Same reason as `ChallengeDialogs` below: `liveContent` had grown to fifteen chained
+/// sheets/alerts, and the Swift type-checker solves a modifier chain as ONE expression, so its cost
+/// grows far faster than the number of modifiers. Splitting a self-contained run of them behind a
+/// single `.modifier(...)` gives the compiler several small problems instead of one huge one.
+/// Purely a compile-time change — the presentations behave exactly as they did inline.
+private struct LineupPickerSheets: ViewModifier {
+    @Bindable var game: Game
+    @Binding var showBatterPicker: Bool
+    @Binding var showPitcherPicker: Bool
+    @Binding var showSubstitution: Bool
+    @Binding var showStealPicker: Bool
+    let pitcherChangeAlert: Binding<Bool>
+    let pitcherChangeError: String?
+    let onPitcherChosen: (Player) -> Void
+    let onOverridePitcher: () -> Void
+    let onSteal: (GameStatLine) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $showBatterPicker) {
+                LinePicker(title: "Select Batter", lines: game.battingLineup,
+                           subtitle: game.currentBatterLine.map { "Current Batter: \($0.player?.name ?? "—")" },
+                           selectedPlayer: game.currentBatterLine?.player) { line in
+                    if let idx = game.battingLineup.firstIndex(where: { $0 === line }) {
+                        game.currentBatterIndex = idx
+                    }
+                }
+            }
+            .sheet(isPresented: $showPitcherPicker) {
+                LinePicker(title: "Select Pitcher", lines: game.lineup(isHome: !game.battingIsHome),
+                           subtitle: game.activePitcher.map { "Current Pitcher: \($0.name)" },
+                           selectedPlayer: game.activePitcher) { line in
+                    if let player = line.player { onPitcherChosen(player) }
+                }
+            }
+            .sheet(isPresented: $showSubstitution) {
+                SubstitutionView(game: game)
+            }
+            // Credit a stolen base to any batter in the lineup (undoable).
+            .sheet(isPresented: $showStealPicker) {
+                LinePicker(title: "Stolen Base — who?", lines: game.battingLineup,
+                           subtitle: "Credit the stolen base to the baserunner.") { line in
+                    onSteal(line)
+                }
+            }
+            .alert("Can't Swap Pitcher", isPresented: pitcherChangeAlert, presenting: pitcherChangeError) { _ in
+                Button("Override (injury)") { onOverridePitcher() }
+                Button("Cancel", role: .cancel) { }
+            } message: { message in
+                Text(message)
+            }
+    }
+}
+
+// MARK: - Game-end alerts
+
+/// The two ways a game finishes: the manual "End Game?" confirmation, and the automatic "Game Over"
+/// prompt when the engine detects the game is decided. Extracted for the same type-checker reason as
+/// `LineupPickerSheets` above.
+private struct GameEndAlerts: ViewModifier {
+    @Bindable var game: Game
+    @Binding var showEndConfirm: Bool
+    @Binding var showGameOver: Bool
+    @Binding var reviewingLineScore: Bool
+    let gameOverMessage: String
+
+    func body(content: Content) -> some View {
+        content
+            .alert("End Game?", isPresented: $showEndConfirm) {
+                Button("End Game", role: .destructive) {
+                    game.status = .final   // the view switches to the Game Summary
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                endConfirmMessage
+            }
+            .alert("Game Over", isPresented: $showGameOver) {
+                Button("End Game") { game.status = .final }
+                Button("Edit Line Score") { reviewingLineScore = true }
+            } message: {
+                Text(gameOverMessage + "\n\nEnd the game, or edit the line score if you need to make corrections.")
+            }
+    }
+
+    /// "Everyone must pitch" is a warning, not a block — you can always end the game anyway.
+    @ViewBuilder
+    private var endConfirmMessage: some View {
+        let unpitched = game.playersWhoHaventPitched()
+        if unpitched.isEmpty {
+            Text("This finishes the game. You can review it in the Game Summary.")
+        } else {
+            Text("These players haven't pitched yet: \(unpitched.map(\.name).joined(separator: ", ")). End the game anyway?")
+        }
     }
 }
 

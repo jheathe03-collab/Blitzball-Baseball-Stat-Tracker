@@ -108,6 +108,74 @@ struct PlayerDetailView: View {
         }
     }
 
+    // MARK: - Stat sections
+    //
+    // Each section is its own function for the same reason `filterSection` below already is: the
+    // type-checker solves a view body as ONE expression, and these four sections together hold ~35
+    // `StatCell`s. Note the values use `String(...)` rather than `"\(...)"` — string interpolation
+    // makes the compiler search every `appendInterpolation` overload for each one, which is real
+    // cost when there are dozens. Identical output for an Int.
+
+    private func battingRateSection(_ batting: BattingStats) -> some View {
+        Section(header: Text("Batting").foregroundStyle(.white)) {
+            StatCell(label: "AVG", value: StatFormat.rate(batting.battingAverage))
+            StatCell(label: "OBP", value: StatFormat.rate(batting.onBasePercentage))
+            StatCell(label: "SLG", value: StatFormat.rate(batting.sluggingPercentage))
+            StatCell(label: "OPS", value: StatFormat.rate(batting.onBasePlusSlugging))
+            StatCell(label: "BB%", value: StatFormat.percent(batting.walkRate))
+            StatCell(label: "K%", value: StatFormat.percent(batting.strikeoutRate))
+        }
+        .blitzCardRow()
+    }
+
+    /// Raw counting stats (the box-score numbers) for the current filter.
+    private func battingTotalsSection(_ batting: BattingStats, games: Int) -> some View {
+        Section(header: Text("Batting Totals").foregroundStyle(.white)) {
+            StatCell(label: "G", value: String(games))
+            StatCell(label: "PA", value: String(batting.plateAppearances))
+            StatCell(label: "AB", value: String(batting.atBats))
+            StatCell(label: "H", value: String(batting.hits))
+            StatCell(label: "1B", value: String(batting.singles))
+            StatCell(label: "2B", value: String(batting.doubles))
+            StatCell(label: "3B", value: String(batting.triples))
+            StatCell(label: "HR", value: String(batting.homeRuns))
+            StatCell(label: "RBI", value: String(batting.rbi))
+            StatCell(label: "R", value: String(batting.runsScored))
+            StatCell(label: "BB", value: String(batting.walks))
+            StatCell(label: "K", value: String(batting.strikeouts))
+            StatCell(label: "Kʟ", value: String(batting.strikeoutsLooking))
+            StatCell(label: "HBP", value: String(batting.hitByPitch))
+            StatCell(label: "SB", value: String(batting.stolenBases))
+        }
+        .blitzCardRow()
+    }
+
+    private func pitchingRateSection(_ pitching: PitchingStats) -> some View {
+        Section(header: Text("Pitching").foregroundStyle(.white)) {
+            StatCell(label: "ERA", value: StatFormat.ratio(pitching.earnedRunAverage))
+            StatCell(label: "WHIP", value: StatFormat.ratio(pitching.walksAndHitsPerInning))
+            StatCell(label: "K/BB", value: StatFormat.ratio(pitching.strikeoutToWalkRatio))
+            StatCell(label: "BAA", value: StatFormat.rate(pitching.battingAverageAgainst))
+        }
+    }
+
+    /// Raw pitching counting stats for the current filter.
+    private func pitchingTotalsSection(_ pitching: PitchingStats, ipText: String) -> some View {
+        Section(header: Text("Pitching Totals").foregroundStyle(.white)) {
+            StatCell(label: "IP", value: ipText)
+            StatCell(label: "H", value: String(pitching.hitsAllowed))
+            StatCell(label: "R", value: String(pitching.runsAllowed))
+            StatCell(label: "ER", value: String(pitching.earnedRuns))
+            StatCell(label: "HR", value: String(pitching.homeRunsAllowed))
+            StatCell(label: "BB", value: String(pitching.walksAllowed))
+            StatCell(label: "K", value: String(pitching.strikeouts))
+            StatCell(label: "Kʟ", value: String(pitching.strikeoutsLooking))
+            StatCell(label: "SV", value: String(pitching.saves))
+            StatCell(label: "QS", value: String(pitching.qualityStarts))
+        }
+        .blitzCardRow()
+    }
+
     // Extracted from `body` to keep each view small enough for the Swift type-checker.
     @ViewBuilder
     private var filterSection: some View {
@@ -157,58 +225,10 @@ struct PlayerDetailView: View {
         return List {
             profileSection
             filterSection
-
-            Section(header: Text("Batting").foregroundStyle(.white)) {
-                StatCell(label: "AVG", value: StatFormat.rate(batting.battingAverage))
-                StatCell(label: "OBP", value: StatFormat.rate(batting.onBasePercentage))
-                StatCell(label: "SLG", value: StatFormat.rate(batting.sluggingPercentage))
-                StatCell(label: "OPS", value: StatFormat.rate(batting.onBasePlusSlugging))
-                StatCell(label: "BB%", value: StatFormat.percent(batting.walkRate))
-                StatCell(label: "K%", value: StatFormat.percent(batting.strikeoutRate))
-            }
-            .blitzCardRow()
-
-            // Raw counting stats (the box-score numbers) for the current filter.
-            Section(header: Text("Batting Totals").foregroundStyle(.white)) {
-                StatCell(label: "G", value: "\(games)")
-                StatCell(label: "PA", value: "\(batting.plateAppearances)")
-                StatCell(label: "AB", value: "\(batting.atBats)")
-                StatCell(label: "H", value: "\(batting.hits)")
-                StatCell(label: "1B", value: "\(batting.singles)")
-                StatCell(label: "2B", value: "\(batting.doubles)")
-                StatCell(label: "3B", value: "\(batting.triples)")
-                StatCell(label: "HR", value: "\(batting.homeRuns)")
-                StatCell(label: "RBI", value: "\(batting.rbi)")
-                StatCell(label: "R", value: "\(batting.runsScored)")
-                StatCell(label: "BB", value: "\(batting.walks)")
-                StatCell(label: "K", value: "\(batting.strikeouts)")
-                StatCell(label: "Kʟ", value: "\(batting.strikeoutsLooking)")
-                StatCell(label: "HBP", value: "\(batting.hitByPitch)")
-                StatCell(label: "SB", value: "\(batting.stolenBases)")
-            }
-            .blitzCardRow()
-
-            Section(header: Text("Pitching").foregroundStyle(.white)) {
-                StatCell(label: "ERA", value: StatFormat.ratio(pitching.earnedRunAverage))
-                StatCell(label: "WHIP", value: StatFormat.ratio(pitching.walksAndHitsPerInning))
-                StatCell(label: "K/BB", value: StatFormat.ratio(pitching.strikeoutToWalkRatio))
-                StatCell(label: "BAA", value: StatFormat.rate(pitching.battingAverageAgainst))
-            }
-
-            // Raw pitching counting stats for the current filter.
-            Section(header: Text("Pitching Totals").foregroundStyle(.white)) {
-                StatCell(label: "IP", value: ipText)
-                StatCell(label: "H", value: "\(pitching.hitsAllowed)")
-                StatCell(label: "R", value: "\(pitching.runsAllowed)")
-                StatCell(label: "ER", value: "\(pitching.earnedRuns)")
-                StatCell(label: "HR", value: "\(pitching.homeRunsAllowed)")
-                StatCell(label: "BB", value: "\(pitching.walksAllowed)")
-                StatCell(label: "K", value: "\(pitching.strikeouts)")
-                StatCell(label: "Kʟ", value: "\(pitching.strikeoutsLooking)")
-                StatCell(label: "SV", value: "\(pitching.saves)")
-                StatCell(label: "QS", value: "\(pitching.qualityStarts)")
-            }
-            .blitzCardRow()
+            battingRateSection(batting)
+            battingTotalsSection(batting, games: games)
+            pitchingRateSection(pitching)
+            pitchingTotalsSection(pitching, ipText: ipText)
 
             // Every game this player is in — swipe to delete (frees the player to be deleted).
             gamesSection
@@ -237,27 +257,16 @@ struct PlayerDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingEdit) {
-            EditPlayerView(player: player)
-        }
-        .fullScreenCover(isPresented: $showingCard) {
-            PlayerCardView(player: player)
-        }
-        .confirmationDialog("Include player photo?", isPresented: $confirmingPhotoExport, titleVisibility: .visible) {
-            Button("Include Photo") { exportStats(includePhotos: true) }
-            Button("Without Photo (smaller file)") { exportStats(includePhotos: false) }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("The photo makes the file larger to share.")
-        }
-        .sheet(item: $exportFile) { file in
-            ShareSheet(items: [file.url])
-        }
-        .alert("Export Failed", isPresented: exportErrorBinding) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(exportError ?? "")
-        }
+        .modifier(PlayerDetailPresentations(
+            player: player,
+            showingEdit: $showingEdit,
+            showingCard: $showingCard,
+            confirmingPhotoExport: $confirmingPhotoExport,
+            exportFile: $exportFile,
+            exportErrorBinding: exportErrorBinding,
+            exportError: exportError ?? "",
+            onExport: exportStats(includePhotos:)
+        ))
         .alert("Delete Game?", isPresented: gameDeleteBinding, presenting: gameToDelete) { game in
             Button("Delete Game", role: .destructive) {
                 modelContext.delete(game)
@@ -315,6 +324,46 @@ struct PlayerDetailView: View {
 }
 
 /// A shareable file wrapper (Identifiable so it can drive `.sheet(item:)`).
+/// This screen's edit sheet, baseball-card cover, and the three-step stats-export flow.
+///
+/// Bundled into one modifier so `PlayerDetailView.body` stays cheap to type-check — same treatment
+/// as `ChallengeDialogs` in LiveGameView. No behavioural change.
+private struct PlayerDetailPresentations: ViewModifier {
+    @Bindable var player: Player
+    @Binding var showingEdit: Bool
+    @Binding var showingCard: Bool
+    @Binding var confirmingPhotoExport: Bool
+    @Binding var exportFile: ExportFile?
+    let exportErrorBinding: Binding<Bool>
+    let exportError: String
+    let onExport: (Bool) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $showingEdit) {
+                EditPlayerView(player: player)
+            }
+            .fullScreenCover(isPresented: $showingCard) {
+                PlayerCardView(player: player)
+            }
+            .confirmationDialog("Include player photo?", isPresented: $confirmingPhotoExport, titleVisibility: .visible) {
+                Button("Include Photo") { onExport(true) }
+                Button("Without Photo (smaller file)") { onExport(false) }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("The photo makes the file larger to share.")
+            }
+            .sheet(item: $exportFile) { file in
+                ShareSheet(items: [file.url])
+            }
+            .alert("Export Failed", isPresented: exportErrorBinding) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(exportError)
+            }
+    }
+}
+
 private struct ExportFile: Identifiable {
     let id = UUID()
     let url: URL

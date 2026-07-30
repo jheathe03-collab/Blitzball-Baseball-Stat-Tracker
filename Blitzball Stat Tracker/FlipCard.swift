@@ -39,7 +39,12 @@ struct FlipCard<Front: View, Back: View>: View {
 /// Rotates one face by the shared angle and shows it only on its half of the flip (front while
 /// angle < 90°, back once past 90°). Conforms to `Animatable` so `angle` animates continuously —
 /// that's what lets the opacity swap land exactly at the 90° edge-on midpoint.
-private struct CardFace: ViewModifier, Animatable {
+///
+/// Internal rather than private because `ZoomedCardView` reuses this exact rotation/opacity maths
+/// while driving `angle` from its own state. It can't just use `FlipCard`: `FlipCard` owns its tap
+/// gesture, and the zoomed card needs the flip tap to sit at the same level as its tilt drag so the
+/// two don't become competing gesture recognizers.
+struct CardFace: ViewModifier, Animatable {
     var angle: Double
     let isBack: Bool
 

@@ -140,8 +140,10 @@ struct WoodCardFront: View {
 
     private var nameBox: some View {
         Text(player.name.uppercased())
+            // Only ONE `.font(...)` — see the matching note in ClassicCardTemplate.nameStrip.
+            // The trailing `.font(.headline.weight(.black))` was silently overriding the dsaccent
+            // custom typeface.
             .font(CustomFont.dsaccent(12))
-            .font(.headline.weight(.black))
             .foregroundStyle(.white)
             .lineLimit(1).minimumScaleFactor(0.5)
             .padding(.horizontal, 14).padding(.vertical, 8)

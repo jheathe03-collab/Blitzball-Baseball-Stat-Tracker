@@ -75,7 +75,10 @@ struct TournamentArchive: Codable {
 // MARK: - Export (read-only)
 
 extension TournamentArchive {
-    init(exporting t: Tournament) {
+    /// `includePhotos = false` writes DTOs with `photoData` nil to keep bracket JSON small when the
+    /// user just wants stats. Card-template choice always travels — it's a tiny string and users
+    /// expect the visual to survive round-trip regardless of whether photos are attached.
+    init(exporting t: Tournament, includePhotos: Bool = true) {
         format = Self.currentFormat
         version = Self.currentVersion
         exportedAt = .now
@@ -108,7 +111,10 @@ extension TournamentArchive {
 
         players = playerList.map {
             SeasonArchive.PlayerDTO(name: $0.name, jerseyNumber: $0.jerseyNumber,
-                                    dateAdded: $0.dateAdded, battingStance: $0.battingStance)
+                                    dateAdded: $0.dateAdded,
+                                    battingStance: $0.battingStance,
+                                    photoData: includePhotos ? $0.photoData : nil,
+                                    cardTemplate: $0.cardTemplate)
         }
         teams = teamList.map {
             SeasonArchive.TeamDTO(name: $0.name, logoName: $0.logoName, league: $0.league,
@@ -214,14 +220,24 @@ extension TournamentArchive {
         let existingPlayers = (try? context.fetch(FetchDescriptor<Player>())) ?? []
         var playerMap: [String: Player] = [:]
         for dto in players {
+            // Photo blob from a third-party archive: cap size + verify decodability before
+            // persisting. See ImportedPhoto.sanitized.
+            let safePhoto = ImportedPhoto.sanitized(dto.photoData)
             if let match = existingPlayers.first(where: { $0.name.caseInsensitiveCompare(dto.name) == .orderedSame }) {
                 // Two DTOs that only differ in case can BOTH resolve to the same existing player
                 // here — that's the right merge behavior (this device already knows them as one).
+                // Non-destructive backfill for the whole profile block — matches PlayerArchive
+                // and SeasonArchive so a bracket round-trip carries the same fields they do.
                 if match.battingStance == nil { match.battingStance = dto.battingStance }
+                if match.photoData == nil { match.photoData = safePhoto }
+                if match.cardTemplate == nil { match.cardTemplate = dto.cardTemplate }
                 playerMap[dto.name] = match
             } else {
                 let p = Player(name: dto.name, jerseyNumber: dto.jerseyNumber,
-                               battingStance: dto.battingStance, dateAdded: dto.dateAdded)
+                               battingStance: dto.battingStance,
+                               photoData: safePhoto,
+                               cardTemplate: dto.cardTemplate,
+                               dateAdded: dto.dateAdded)
                 context.insert(p); playerMap[dto.name] = p
             }
         }

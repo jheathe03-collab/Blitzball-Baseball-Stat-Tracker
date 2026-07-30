@@ -30,54 +30,8 @@ struct TeamsView: View {
                 .foregroundStyle(.white)
             } else {
                 List {
-                    // Tap a team to manage its roster.
-                    Section(header: Text("Teams").foregroundStyle(.white)) {
-                        ForEach(teams) { team in
-                            NavigationLink(destination: TeamDetailView(team: team)) {
-                                HStack {
-                                    TeamLogoView(team: team, size: 28)
-                                    Text(team.name)
-                                        .font(.headline)
-                                    Spacer()
-                                    Text("\(team.players.count) players")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .onDelete { offsets in
-                            guard let index = offsets.first else { return }
-                            let team = teams[index]
-                            // A team referenced by any game (season or exhibition) can't be deleted:
-                            // SwiftData would leave those games pointing at a deleted object → crash.
-                            if gamesUsing(team).isEmpty {
-                                teamPendingDeletion = team   // safe — ask to confirm
-                            } else {
-                                teamInUse = team             // blocked — explain why
-                            }
-                        }
-                    }
-                    .blitzCardRow()
-
-                    // Win/Loss standings (0-0 for now) + a way into the full stats table.
-                    Section(header: Text("Team Leaderboard").foregroundStyle(.white)) {
-                        ForEach(teams) { team in
-                            let record = team.record(from: games)
-                            HStack {
-                                TeamLogoView(team: team, size: 24)
-                                Text(team.name)
-                                Spacer()
-                                Text("Wins \(record.wins)  Losses \(record.losses)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                        }
-                        NavigationLink(destination: AllTeamsStatsView()) {
-                            Label("Stat Leaders", systemImage: "chart.bar")
-                        }
-                    }
-                    .blitzCardRow()
+                    teamsSection
+                    leaderboardSection
                 }
                 .blitzListStyle()
             }
@@ -93,25 +47,72 @@ struct TeamsView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingAddTeam) {
-            AddTeamView()
-        }
-        // Confirm before actually deleting. `presenting:` hands the pending team into the
-        // closures so we can name it in the buttons and message.
-        .alert("Delete Team?", isPresented: deleteTeamAlert, presenting: teamPendingDeletion) { team in
-            Button("Delete \u{201C}\(team.name)\u{201D}", role: .destructive) {
-                modelContext.delete(team)
+        .modifier(TeamListPresentations(
+            showingAddTeam: $showingAddTeam,
+            deleteTeamAlert: deleteTeamAlert,
+            teamPendingDeletion: teamPendingDeletion,
+            teamInUseAlert: teamInUseAlert,
+            teamInUse: teamInUse,
+            inUseMessage: inUseMessage(for:),
+            onDelete: { team in modelContext.delete(team) }
+        ))
+    }
+
+    // The two list sections live in their own properties rather than inline in `body`. SwiftUI
+    // bodies are solved by the type-checker as a single expression, so splitting a long one into
+    // named pieces turns one large problem into several small ones. No visual change.
+
+    /// Tap a team to manage its roster.
+    private var teamsSection: some View {
+        Section(header: Text("Teams").foregroundStyle(.white)) {
+            ForEach(teams) { team in
+                NavigationLink(destination: TeamDetailView(team: team)) {
+                    HStack {
+                        TeamLogoView(team: team, size: 28)
+                        Text(team.name)
+                            .font(.headline)
+                        Spacer()
+                        Text("\(team.players.count) players")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            Button("Cancel", role: .cancel) { }
-        } message: { team in
-            Text("Are you sure you want to delete \u{201C}\(team.name)\u{201D}? This cannot be undone. (Players stay in your Players list.)")
+            .onDelete { offsets in
+                guard let index = offsets.first else { return }
+                let team = teams[index]
+                // A team referenced by any game (season or exhibition) can't be deleted:
+                // SwiftData would leave those games pointing at a deleted object → crash.
+                if gamesUsing(team).isEmpty {
+                    teamPendingDeletion = team   // safe — ask to confirm
+                } else {
+                    teamInUse = team             // blocked — explain why
+                }
+            }
         }
-        // Blocked deletion: the team is still used by a game/season.
-        .alert("Can't Delete Team", isPresented: teamInUseAlert, presenting: teamInUse) { _ in
-            Button("OK", role: .cancel) { }
-        } message: { team in
-            Text(inUseMessage(for: team))
+        .blitzCardRow()
+    }
+
+    /// Win/Loss standings + a way into the full stats table.
+    private var leaderboardSection: some View {
+        Section(header: Text("Team Leaderboard").foregroundStyle(.white)) {
+            ForEach(teams) { team in
+                let record = team.record(from: games)
+                HStack {
+                    TeamLogoView(team: team, size: 24)
+                    Text(team.name)
+                    Spacer()
+                    Text("Wins \(record.wins)  Losses \(record.losses)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            NavigationLink(destination: AllTeamsStatsView()) {
+                Label("Stat Leaders", systemImage: "chart.bar")
+            }
         }
+        .blitzCardRow()
     }
 
     /// Games (season or exhibition) that still reference this team on either side.
@@ -149,4 +150,41 @@ struct TeamsView: View {
         TeamsView()
     }
     .modelContainer(for: [Player.self, Team.self], inMemory: true)
+}
+
+/// The add-team sheet plus the two delete confirmations.
+///
+/// Bundled into one modifier so `TeamsView.body` stays cheap for the Swift type-checker, which
+/// solves a whole modifier chain as a single expression. No behavioural change.
+private struct TeamListPresentations: ViewModifier {
+    @Binding var showingAddTeam: Bool
+    let deleteTeamAlert: Binding<Bool>
+    let teamPendingDeletion: Team?
+    let teamInUseAlert: Binding<Bool>
+    let teamInUse: Team?
+    let inUseMessage: (Team) -> String
+    let onDelete: (Team) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $showingAddTeam) {
+                AddTeamView()
+            }
+            // Confirm before actually deleting. `presenting:` hands the pending team into the
+            // closures so we can name it in the buttons and message.
+            .alert("Delete Team?", isPresented: deleteTeamAlert, presenting: teamPendingDeletion) { team in
+                Button("Delete \u{201C}\(team.name)\u{201D}", role: .destructive) {
+                    onDelete(team)
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: { team in
+                Text("Are you sure you want to delete \u{201C}\(team.name)\u{201D}? This cannot be undone. (Players stay in your Players list.)")
+            }
+            // Blocked deletion: the team is still used by a game/season.
+            .alert("Can't Delete Team", isPresented: teamInUseAlert, presenting: teamInUse) { _ in
+                Button("OK", role: .cancel) { }
+            } message: { team in
+                Text(inUseMessage(team))
+            }
+    }
 }

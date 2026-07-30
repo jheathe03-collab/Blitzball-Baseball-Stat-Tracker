@@ -35,8 +35,21 @@ struct LeaderTicker: View {
 
     /// Build "LEAGUE LEADERS  (Runs) - A - 3, B - 2, C - 1  •  (RBIs) - …" from career totals.
     /// Only categories with at least one non-zero leader are included.
+    /// One player's total in one category, ready to rank.
+    ///
+    /// A named type rather than an inline `(name:value:)` tuple purely to help the compiler: the
+    /// ranking below chains map → filter → sorted → prefix, and when those hand an anonymous tuple
+    /// from one generic call to the next, the type-checker has to solve the whole chain as a single
+    /// puzzle. A concrete named type turns it into several small independent ones.
+    private struct LeaderLine {
+        let name: String
+        let value: Int
+    }
+
     private var tickerText: String {
-        let entries = players.map { (name: $0.name, stats: $0.careerBatting) }
+        let entries: [(name: String, stats: BattingStats)] = players.map {
+            (name: $0.name, stats: $0.careerBatting)
+        }
 
         // label → how to pull that counting stat out of a BattingStats line.
         let categories: [(String, (BattingStats) -> Int)] = [
@@ -51,15 +64,25 @@ struct LeaderTicker: View {
             ("Kʟ - Batting",      { $0.strikeoutsLooking }),
         ]
 
-        let parts: [String] = categories.compactMap { label, stat in
-            let ranked = entries
-                .map { (name: $0.name, value: stat($0.stats)) }
-                .filter { $0.value > 0 }
-                .sorted { $0.value != $1.value ? $0.value > $1.value : $0.name < $1.name }
-                .prefix(3)
-            guard !ranked.isEmpty else { return nil }
-            let names = ranked.map { "\($0.name) - \($0.value)" }.joined(separator: ", ")
-            return "(\(label)) - \(names)"
+        // Written as a loop with explicitly-typed steps rather than one chained expression. Same
+        // result, but each `let` is a separate, trivially-solved problem for the compiler.
+        var parts: [String] = []
+        for (label, stat) in categories {
+            var ranked: [LeaderLine] = []
+            for entry in entries {
+                let value: Int = stat(entry.stats)
+                if value > 0 {
+                    ranked.append(LeaderLine(name: entry.name, value: value))
+                }
+            }
+            // Highest total first; ties broken alphabetically so the order is stable.
+            ranked.sort { lhs, rhs in
+                lhs.value != rhs.value ? lhs.value > rhs.value : lhs.name < rhs.name
+            }
+            let top: [LeaderLine] = Array(ranked.prefix(3))
+            guard !top.isEmpty else { continue }
+            let names: [String] = top.map { line in line.name + " - " + String(line.value) }
+            parts.append("(" + label + ") - " + names.joined(separator: ", "))
         }
 
         guard !parts.isEmpty else { return "" }

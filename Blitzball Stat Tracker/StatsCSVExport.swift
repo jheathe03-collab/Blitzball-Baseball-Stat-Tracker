@@ -40,12 +40,21 @@ enum StatsCSV {
         // Standings
         rows.append(["STANDINGS"])
         rows.append(["Team", "Wins", "Losses"])
-        let standings = teams
-            .map { (team: $0, record: $0.record(from: season.games)) }
-            .sorted { $0.record.wins != $1.record.wins ? $0.record.wins > $1.record.wins
-                                                        : $0.record.losses < $1.record.losses }
+        // Built step by step with explicit types rather than as one map/sorted chain: the element is
+        // a tuple containing another tuple, and threading that through chained generic calls is
+        // something the Swift type-checker is slow at. Same result, far cheaper to compile.
+        var standings: [(team: Team, record: (wins: Int, losses: Int))] = []
+        for team in teams {
+            let record: (wins: Int, losses: Int) = team.record(from: season.games)
+            standings.append((team: team, record: record))
+        }
+        standings.sort { lhs, rhs in
+            lhs.record.wins != rhs.record.wins
+                ? lhs.record.wins > rhs.record.wins
+                : lhs.record.losses < rhs.record.losses
+        }
         for entry in standings {
-            rows.append([entry.team.name, "\(entry.record.wins)", "\(entry.record.losses)"])
+            rows.append([entry.team.name, String(entry.record.wins), String(entry.record.losses)])
         }
         rows.append([])
 

@@ -14,7 +14,8 @@ enum TeamLogo {
     /// Asset names of the bundled logos, in menu order. These MUST match the imageset names in
     /// Assets.xcassets — they're what `Image(_:)` loads and what `Team.logoName` stores.
     static let all = ["Banana", "BlitzDragons", "Bobcats", "Dragons",
-                      "Elephants", "Gustbusters", "Hornets", "MightyFish", "Peppers", "Sharks"]
+                      "Elephants", "Gustbusters", "HoneyBees", "Hornets",
+                      "MightyFish", "Peppers", "Sharks"]
 
     /// The friendly, on-screen team name for each asset. Kept separate from the asset name so we
     /// can show fun labels without breaking image lookups (which key off the asset name).
@@ -43,6 +44,7 @@ enum TeamLogo {
         case "Peppers":    return 1.35
         case "Hornets":    return 1.40   // artwork sits in heavy transparent padding
         case "Dragons":    return 1.20
+        case "HoneyBees":  return 1.20
         default:           return 1.0
         }
     }

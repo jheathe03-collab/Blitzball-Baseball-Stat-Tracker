@@ -190,10 +190,15 @@ extension PlayerArchive {
         // so re-importing the same file (or a superset) doesn't double-count history.
         var existingKeys: Set<ArchivedLineKey> = []
 
+        // Photo blobs from third-party archives go through ImportedPhoto.sanitized — see that
+        // file for the size + decodability policy. Cheaper to do this once here than at every
+        // future render site.
+        let safePhoto = ImportedPhoto.sanitized(player.photoData)
+
         switch resolution {
         case .createNew:
             let player = Player(name: player.name, jerseyNumber: player.jerseyNumber,
-                                battingStance: player.battingStance, photoData: player.photoData,
+                                battingStance: player.battingStance, photoData: safePhoto,
                                 cardTemplate: player.cardTemplate)
             context.insert(player)
             target = player
@@ -204,7 +209,7 @@ extension PlayerArchive {
             // jerseyNumber: only backfill when the existing player doesn't already have it.
             if existing.jerseyNumber == nil { existing.jerseyNumber = player.jerseyNumber }
             if existing.battingStance == nil { existing.battingStance = player.battingStance }
-            if existing.photoData == nil { existing.photoData = player.photoData }
+            if existing.photoData == nil { existing.photoData = safePhoto }
             if existing.cardTemplate == nil { existing.cardTemplate = player.cardTemplate }
             existingKeys = Set(existing.gameStatLines
                 .filter { $0.isArchived && $0.game == nil }
@@ -219,7 +224,7 @@ extension PlayerArchive {
             for line in toDelete { context.delete(line) }
             if existing.jerseyNumber == nil { existing.jerseyNumber = player.jerseyNumber }
             if existing.battingStance == nil { existing.battingStance = player.battingStance }
-            if existing.photoData == nil { existing.photoData = player.photoData }
+            if existing.photoData == nil { existing.photoData = safePhoto }
             if existing.cardTemplate == nil { existing.cardTemplate = player.cardTemplate }
             target = existing
         }

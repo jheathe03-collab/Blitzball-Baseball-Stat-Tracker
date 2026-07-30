@@ -89,8 +89,10 @@ struct ClassicCardFront: View {
             }
             Spacer()
             Text(player.name.uppercased())
+                // Only ONE `.font(...)` — a second modifier of the same kind wipes the first, so
+                // stacking `.subheadline.weight(.black)` after the custom font was silently
+                // dropping the Gothic Neo typeface. The custom family already carries its weight.
                 .font(.custom("Apple SD Gothic Neo Bold", size: 12))
-                .font(.subheadline.weight(.black))
                 .lineLimit(1).minimumScaleFactor(0.6)
         }
         .foregroundStyle(.white)

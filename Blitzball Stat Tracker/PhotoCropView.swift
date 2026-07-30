@@ -93,10 +93,23 @@ struct PhotoCropView: View {
             }
     }
 
-    /// Keep the image from being dragged completely off the window.
+    /// Keep the image from being dragged off the crop window (which would expose the black ZStack
+    /// background and bake it into the saved JPEG).
+    ///
+    /// The previous limit `cropW * zoom` was orders of magnitude too generous — it let the whole
+    /// photo slide out of the window at zoom = 1. The correct slack is HALF of the *rendered*
+    /// image's overflow past the window: `(renderedDim * zoom - cropDim) / 2`, clamped at 0.
+    /// `.scaledToFill()` in a cropW × cropH inner frame scales the image so its short axis exactly
+    /// matches the window and the long axis extends beyond (so `renderedW`/`renderedH` depend on
+    /// the source aspect vs the crop aspect).
     private func clampOffset() {
-        let limitX = cropW * zoom
-        let limitY = cropH * zoom
+        let imageAspect = image.size.width / max(image.size.height, 1)
+        let cropAspect = cropW / cropH
+        // How large the image is actually drawn (before scaleEffect) inside the cropW × cropH frame.
+        let renderedW: CGFloat = imageAspect > cropAspect ? cropH * imageAspect : cropW
+        let renderedH: CGFloat = imageAspect < cropAspect ? cropW / imageAspect : cropH
+        let limitX = max(0, (renderedW * zoom - cropW) / 2)
+        let limitY = max(0, (renderedH * zoom - cropH) / 2)
         offset.width = min(max(offset.width, -limitX), limitX)
         offset.height = min(max(offset.height, -limitY), limitY)
     }

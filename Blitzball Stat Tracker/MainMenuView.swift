@@ -156,14 +156,25 @@ private struct LeaderboardCard: View {
 
     // MARK: Leaders
 
+    /// The team with the best record, or nil if nobody has finished a game yet.
+    ///
+    /// Spelled out as a loop rather than a map/filter/sorted/first chain. The element here is a
+    /// tuple containing another tuple, and passing that through four generic calls in one expression
+    /// is something the Swift type-checker is unusually slow at — it was the single most expensive
+    /// expression in this file. Annotating each step makes them independent, cheap problems.
     private var topTeam: (team: Team, record: (wins: Int, losses: Int))? {
-        teams
-            .map { (team: $0, record: $0.record(from: games)) }
-            .filter { $0.record.wins + $0.record.losses > 0 }   // must have a decided game
-            .sorted { $0.record.wins != $1.record.wins
-                        ? $0.record.wins > $1.record.wins
-                        : $0.record.losses < $1.record.losses }
-            .first
+        var standings: [(team: Team, record: (wins: Int, losses: Int))] = []
+        for team in teams {
+            let record: (wins: Int, losses: Int) = team.record(from: games)
+            guard record.wins + record.losses > 0 else { continue }   // must have a decided game
+            standings.append((team: team, record: record))
+        }
+        standings.sort { lhs, rhs in
+            lhs.record.wins != rhs.record.wins
+                ? lhs.record.wins > rhs.record.wins
+                : lhs.record.losses < rhs.record.losses
+        }
+        return standings.first
     }
 
     private var topBatter: (player: Player, stats: BattingStats)? {

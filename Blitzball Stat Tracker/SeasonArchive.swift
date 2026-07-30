@@ -316,18 +316,21 @@ extension SeasonArchive {
         let existingPlayers = (try? context.fetch(FetchDescriptor<Player>())) ?? []
         var playerMap: [String: Player] = [:]
         for dto in players {
+            // Photo blob from a third-party archive: cap size + verify decodability before
+            // persisting. See ImportedPhoto.sanitized.
+            let safePhoto = ImportedPhoto.sanitized(dto.photoData)
             if let existing = existingPlayers.first(where: { $0.name.caseInsensitiveCompare(dto.name) == .orderedSame }) {
                 // Two DTOs that only differ in case can BOTH resolve to the same existing player
                 // here — that's the right merge behavior (this device already knows them as one).
                 // Non-destructively backfill missing profile fields from the archive (matches how
                 // PlayerArchive.apply merges — never overwrites what the device already has).
                 if existing.battingStance == nil { existing.battingStance = dto.battingStance }
-                if existing.photoData == nil { existing.photoData = dto.photoData }
+                if existing.photoData == nil { existing.photoData = safePhoto }
                 if existing.cardTemplate == nil { existing.cardTemplate = dto.cardTemplate }
                 playerMap[dto.name] = existing
             } else {
                 let p = Player(name: dto.name, jerseyNumber: dto.jerseyNumber,
-                               battingStance: dto.battingStance, photoData: dto.photoData,
+                               battingStance: dto.battingStance, photoData: safePhoto,
                                cardTemplate: dto.cardTemplate, dateAdded: dto.dateAdded)
                 context.insert(p)
                 playerMap[dto.name] = p

@@ -41,6 +41,111 @@ final class CardRenderPreview: XCTestCase {
         attachBand(TacoStyleCardFront(player: player), name: "taco_front_upper", from: 0, to: 160)
     }
 
+    // MARK: - Carousel
+
+    /// Renders the card carousel headlessly so its layout can be reviewed without running the app.
+    ///
+    /// `ImageRenderer` draws a body exactly once, with no `onAppear` and no animation, so the views
+    /// take preview-seam initialisers that seed their state directly. The carousel position is a
+    /// `Double`, which means a fractional index renders a genuine mid-drag frame.
+    @MainActor
+    func testRenderCarousel() throws {
+        try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
+        // The container must stay alive for the whole test: the fixture's players are backed by it,
+        // and letting it deallocate invalidates them out from under the renderer.
+        let (container, players) = try Self.leagueFixture()
+        defer { withExtendedLifetime(container) {} }
+        let entries = CardCarouselEntry.build(from: players)
+        XCTAssertEqual(entries.count, 11, "fixture should produce 9 rostered + 2 free agents")
+        XCTAssertEqual(entries.last?.groupTitle, CardCarouselEntry.freeAgentsTitle,
+                       "unrostered players must sort to the end")
+
+        // The fan alone, at the positions worth eyeballing.
+        render(fan(entries, at: 0.0), name: "carousel_first")     // clamped at the left end
+        render(fan(entries, at: 4.0), name: "carousel_mid")       // a full symmetric fan
+        render(fan(entries, at: 8.5), name: "carousel_between")   // mid-drag, crossing a team boundary
+        render(fan(entries, at: Double(entries.count - 1)), name: "carousel_last")
+
+        // The whole screen, chrome included — the one to review the design from.
+        render(CardCarouselView(previewEntries: entries, previewIndex: 4.0)
+                .frame(width: 393, height: 852),
+               name: "carousel_screen")
+
+        // The zoomed card with a frozen tilt, to judge the perspective and the shadow offset.
+        render(ZStack {
+                   Color.black.opacity(0.94)
+                   ZoomedCardView(entry: entries[4],
+                                  heroWidth: 300,
+                                  onPage: { _ in false },
+                                  onEdit: {},
+                                  previewTilt: CGSize(width: 120, height: -60))
+               }
+               .frame(width: 393, height: 852),
+               name: "carousel_zoomed_tilted")
+    }
+
+    @MainActor
+    private func fan(_ entries: [CardEntry], at index: Double) -> some View {
+        ZStack {
+            Color.black.opacity(0.94)
+            CardCarouselStack(entries: entries,
+                              snappedItem: .constant(index),
+                              draggingItem: .constant(index),
+                              cardWidth: 244,
+                              zoomedIndex: nil,
+                              namespace: nil,
+                              rasterizes: false,
+                              onZoom: { _ in })
+        }
+        .frame(width: 393, height: 620)
+    }
+
+    /// Three teams of three, plus two unrostered players so the "Free Agents" group appears.
+    /// Templates are spread across the roster deliberately — `.vintage` and `.tacoStyle` do the
+    /// expensive pixel work, so they need to be in the deck for the render to be representative.
+    @MainActor
+    private static func leagueFixture() throws -> (ModelContainer, [Player]) {
+        let container = try ModelContainer(
+            for: Player.self, Team.self, Game.self, GameStatLine.self, Season.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let ctx = container.mainContext
+        let photo = samplePhoto()
+
+        let roster: [(team: String, logo: String, players: [(String, Int, CardTemplateID)])] = [
+            ("Hornets", "Hornets", [("Ava Delgado", 3, .vintage),
+                                    ("Marcus Webb", 11, .tacoStyle),
+                                    ("Ruth Okafor", 7, .classic)]),
+            ("Peppers", "Peppers", [("Bo Tran", 21, .wood),
+                                    ("Iris Nakamura", 9, .goldStandard),
+                                    ("Sal Moreno", 44, .allStar)]),
+            ("Sharks", "Sharks", [("Dee Whitfield", 2, .retroStripe),
+                                  ("Kip Ferrara", 18, .neon90s),
+                                  ("Tomas Reyes", 30, .classic)])
+        ]
+
+        var all: [Player] = []
+        for entry in roster {
+            let team = Team(name: entry.team, logoName: entry.logo)
+            ctx.insert(team)
+            for (name, number, template) in entry.players {
+                let player = Player(name: name, jerseyNumber: number,
+                                    cardTemplate: template.rawValue)
+                ctx.insert(player)
+                player.photoData = photo
+                team.players.append(player)
+                all.append(player)
+            }
+        }
+        // No team — these must collect at the end of the deck.
+        for (name, number) in [("Wendy Cruz", 5), ("Zeke Palmer", 13)] {
+            let player = Player(name: name, jerseyNumber: number, cardTemplate: CardTemplateID.wood.rawValue)
+            ctx.insert(player)
+            all.append(player)
+        }
+        return (container, all)
+    }
+
     @MainActor
     private func attach<V: View>(_ view: V, name: String) {
         let framed = view.frame(width: CardMetrics.nativeWidth, height: CardMetrics.nativeHeight)

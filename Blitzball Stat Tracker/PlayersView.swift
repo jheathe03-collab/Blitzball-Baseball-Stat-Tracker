@@ -34,6 +34,8 @@ struct PlayersView: View {
     @State private var importedSkipped = 0
     // Multi-player export selection sheet.
     @State private var showingExport = false
+    // The full-screen card carousel (the "View All Player Cards" button above the list).
+    @State private var showingCarousel = false
 
     var body: some View {
         // No NavigationStack here anymore — the Main Menu owns it. We just describe the
@@ -48,6 +50,10 @@ struct PlayersView: View {
                 .foregroundStyle(.white)
             } else {
                 List {
+                    // A row rather than a VStack above the List: anything outside the scroll view
+                    // pins in place and stops the large "Players" title collapsing as you scroll.
+                    ViewAllCardsButton { showingCarousel = true }
+
                     ForEach(players) { player in
                         NavigationLink(destination: PlayerDetailView(player: player)) {
                             PlayerRow(player: player)
@@ -77,73 +83,60 @@ struct PlayersView: View {
         .navigationTitle("Players")
         .blitzballBackground()
         .blitzNavBar()
-        .toolbar {
-            // Edit + Add live on the trailing side so they don't collide with the
-            // system back button (which sits on the leading side after a push).
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                EditButton()
-                Menu {
-                    Button {
-                        showingAddPlayer = true
-                    } label: {
-                        Label("Add Player", systemImage: "plus")
-                    }
-                    Button {
-                        showingImporter = true
-                    } label: {
-                        Label("Import Players…", systemImage: "square.and.arrow.down")
-                    }
-                    Button {
-                        showingExport = true
-                    } label: {
-                        Label("Export Players…", systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(players.isEmpty)
+        .toolbar { toolbarContent }
+        .modifier(PlayerListPresentations(
+            players: players,
+            showingAddPlayer: $showingAddPlayer,
+            playerToEdit: $playerToEdit,
+            showingExport: $showingExport,
+            showingCarousel: $showingCarousel,
+            deletePlayerAlert: deletePlayerAlert,
+            playerPendingDeletion: playerPendingDeletion,
+            playerInUseAlert: playerInUseAlert,
+            playerInUse: playerInUse,
+            inUseMessage: inUseMessage(for:),
+            onDelete: { player in modelContext.delete(player) }
+        ))
+        .modifier(PlayerImportDialogs(
+            showingImporter: $showingImporter,
+            pendingImportBinding: pendingImportBinding,
+            pendingImport: pendingImport,
+            duplicateTitle: duplicateTitle,
+            duplicateMessage: duplicateMessage(for:),
+            importMessageBinding: importMessageBinding,
+            importMessage: importMessage ?? "",
+            handleImport: handleImport,
+            resolve: resolve,
+            skipCurrentImport: skipCurrentImport
+        ))
+    }
+
+    /// Edit + Add live on the trailing side so they don't collide with the system back button
+    /// (which sits on the leading side after a push).
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+            EditButton()
+            Menu {
+                Button {
+                    showingAddPlayer = true
                 } label: {
-                    Label("Add", systemImage: "plus")
+                    Label("Add Player", systemImage: "plus")
                 }
+                Button {
+                    showingImporter = true
+                } label: {
+                    Label("Import Players…", systemImage: "square.and.arrow.down")
+                }
+                Button {
+                    showingExport = true
+                } label: {
+                    Label("Export Players…", systemImage: "square.and.arrow.up")
+                }
+                .disabled(players.isEmpty)
+            } label: {
+                Label("Add", systemImage: "plus")
             }
-        }
-        .sheet(isPresented: $showingAddPlayer) {
-            AddPlayerView()
-        }
-        .sheet(item: $playerToEdit) { player in
-            EditPlayerView(player: player)
-        }
-        .sheet(isPresented: $showingExport) {
-            ExportPlayersView(players: players)
-        }
-        .alert("Delete Player?", isPresented: deletePlayerAlert, presenting: playerPendingDeletion) { player in
-            Button("Delete \(player.name)", role: .destructive) {
-                modelContext.delete(player)
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: { player in
-            Text("Are you sure you want to delete \(player.name)? This removes them from any team and can't be undone.")
-        }
-        // Blocked deletion: the player is still used by a game/season.
-        .alert("Can't Delete Player", isPresented: playerInUseAlert, presenting: playerInUse) { _ in
-            Button("OK", role: .cancel) { }
-        } message: { player in
-            Text(inUseMessage(for: player))
-        }
-        .fileImporter(isPresented: $showingImporter,
-                      allowedContentTypes: [.json],
-                      allowsMultipleSelection: true) { result in
-            handleImport(result)
-        }
-        .confirmationDialog(duplicateTitle, isPresented: pendingImportBinding, presenting: pendingImport) { pending in
-            Button("Merge") { resolve(pending, .merge) }
-            Button("Replace", role: .destructive) { resolve(pending, .replace) }
-            Button("Create New") { resolve(pending, .createNew) }
-            Button("Skip", role: .cancel) { skipCurrentImport() }
-        } message: { pending in
-            Text(duplicateMessage(for: pending))
-        }
-        .alert("Import", isPresented: importMessageBinding) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(importMessage ?? "")
         }
     }
 
@@ -290,6 +283,136 @@ private struct PendingImport: Identifiable {
     let id = UUID()
     let archive: PlayerArchive
     let existing: Player
+}
+
+/// The list's own sheets and delete confirmations (add / edit / export / card carousel, plus the
+/// "are you sure" and "can't delete, it's in use" alerts).
+///
+/// Extracted for the same compile-time reason as `PlayerImportDialogs` below.
+private struct PlayerListPresentations: ViewModifier {
+    let players: [Player]
+    @Binding var showingAddPlayer: Bool
+    @Binding var playerToEdit: Player?
+    @Binding var showingExport: Bool
+    @Binding var showingCarousel: Bool
+    let deletePlayerAlert: Binding<Bool>
+    let playerPendingDeletion: Player?
+    let playerInUseAlert: Binding<Bool>
+    let playerInUse: Player?
+    let inUseMessage: (Player) -> String
+    let onDelete: (Player) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $showingAddPlayer) {
+                AddPlayerView()
+            }
+            .sheet(item: $playerToEdit) { player in
+                EditPlayerView(player: player)
+            }
+            .sheet(isPresented: $showingExport) {
+                ExportPlayersView(players: players)
+            }
+            .fullScreenCover(isPresented: $showingCarousel) {
+                CardCarouselView(players: players)
+            }
+            .alert("Delete Player?", isPresented: deletePlayerAlert, presenting: playerPendingDeletion) { player in
+                Button("Delete \(player.name)", role: .destructive) {
+                    onDelete(player)
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: { player in
+                Text("Are you sure you want to delete \(player.name)? This removes them from any team and can't be undone.")
+            }
+            // Blocked deletion: the player is still used by a game/season.
+            .alert("Can't Delete Player", isPresented: playerInUseAlert, presenting: playerInUse) { _ in
+                Button("OK", role: .cancel) { }
+            } message: { player in
+                Text(inUseMessage(player))
+            }
+    }
+}
+
+/// The player-import flow's three presentations (file picker → duplicate-name prompt → result),
+/// lifted out of `PlayersView.body`.
+///
+/// Purely a compile-time measure, same as `ChallengeDialogs` in LiveGameView: `body` had grown to a
+/// dozen chained sheets/alerts and was taking ~4s to type-check on its own. Moving a self-contained
+/// run of them behind one `.modifier(...)` gives the solver three much smaller problems instead.
+private struct PlayerImportDialogs: ViewModifier {
+    @Binding var showingImporter: Bool
+    let pendingImportBinding: Binding<Bool>
+    let pendingImport: PendingImport?
+    let duplicateTitle: String
+    let duplicateMessage: (PendingImport) -> String
+    let importMessageBinding: Binding<Bool>
+    let importMessage: String
+    let handleImport: (Result<[URL], Error>) -> Void
+    let resolve: (PendingImport, ImportResolution) -> Void
+    let skipCurrentImport: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .fileImporter(isPresented: $showingImporter,
+                          allowedContentTypes: [.json],
+                          allowsMultipleSelection: true) { result in
+                handleImport(result)
+            }
+            .confirmationDialog(duplicateTitle,
+                                isPresented: pendingImportBinding,
+                                presenting: pendingImport) { pending in
+                Button("Merge") { resolve(pending, .merge) }
+                Button("Replace", role: .destructive) { resolve(pending, .replace) }
+                Button("Create New") { resolve(pending, .createNew) }
+                Button("Skip", role: .cancel) { skipCurrentImport() }
+            } message: { pending in
+                Text(duplicateMessage(pending))
+            }
+            .alert("Import", isPresented: importMessageBinding) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(importMessage)
+            }
+    }
+}
+
+/// The banner above the player list that opens the card carousel (see CardCarouselView).
+///
+/// It's a list row, so it scrolls with the list, but it's styled as a standalone pill rather than a
+/// list row — hence the cleared row background. `deleteDisabled`/`moveDisabled` stop the toolbar's
+/// Edit button decorating it with a delete circle and a reorder grabber.
+private struct ViewAllCardsButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "rectangle.stack.fill")
+                    .font(.title3)
+                Text("View All Player Cards")
+                    .font(Theme.cardTitle)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.bold())
+                    .opacity(0.5)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .frame(height: 56)
+            .frame(maxWidth: .infinity)
+            .background(Theme.cardFill,
+                        in: RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.cardCornerRadius, style: .continuous)
+                    .stroke(.white.opacity(0.35), lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .deleteDisabled(true)
+        .moveDisabled(true)
+    }
 }
 
 /// One row in the players list.

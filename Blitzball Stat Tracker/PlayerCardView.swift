@@ -21,6 +21,9 @@ struct PlayerCardView: View {
     @State private var pendingCrop: PendingCrop?
     @State private var choosingTemplate = false
     @State private var confirmingPhotoRemoval = false
+    // A human-readable message when a picked photo can't be loaded (iCloud not downloaded,
+    // corrupt image, revoked permission, unsupported format). Non-nil drives the error alert.
+    @State private var photoError: String?
 
     /// The player's chosen card template (falls back to Classic).
     private var template: CardTemplateID {
@@ -116,14 +119,51 @@ struct PlayerCardView: View {
         } message: {
             Text("\(player.name)'s card will show the placeholder until you add another photo. Their stats aren't affected.")
         }
+        .alert("Couldn't Load Photo", isPresented: photoErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(photoError ?? "")
+        }
+    }
+
+    /// Bridges the optional-message pattern to a Bool binding for `.alert(_:isPresented:)`.
+    private var photoErrorAlert: Binding<Bool> {
+        Binding(get: { photoError != nil }, set: { if !$0 { photoError = nil } })
     }
 
     @MainActor
     private func loadPhoto(_ item: PhotosPickerItem) async {
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let ui = UIImage(data: data) else { return }
+        // Always reset the picker binding so the .onChange fires again if the user later picks the
+        // SAME photo — a common recovery step after an error.
+        defer { photoItem = nil }
+
+        let data: Data?
+        do {
+            data = try await item.loadTransferable(type: Data.self)
+        } catch {
+            // Real failures we've seen in the wild: iCloud photo hasn't downloaded, HEIC transcode
+            // fails, permission revoked between pick and load. Surface them instead of silently
+            // returning — the old code left the user staring at an unchanged card wondering why.
+            photoError = "Couldn't load that photo: \(error.localizedDescription)"
+            return
+        }
+        guard let data else {
+            photoError = "The photo library returned no image data. Try picking again."
+            return
+        }
+
+        // Decode OFF the main thread. A ~15MB HEIC decoded via UIImage(data:) on the main actor
+        // hitches the flip-card animation and, on older devices with panorama-sized photos, can
+        // push the app past its memory limit before the crop screen even appears.
+        let ui: UIImage? = await Task.detached(priority: .userInitiated) {
+            UIImage(data: data)
+        }.value
+        guard let ui else {
+            photoError = "This image format isn't supported. Pick a JPEG or HEIC photo."
+            return
+        }
+
         pendingCrop = PendingCrop(image: ui)
-        photoItem = nil
     }
 }
 
