@@ -238,8 +238,10 @@ struct PlayersView: View {
         finishImport()
     }
 
-    private func resolve(_ pending: PendingImport, _ resolution: ImportResolution) {
-        let added = pending.archive.apply(resolution: resolution, existing: pending.existing, context: modelContext)
+    private func resolve(_ pending: PendingImport, _ resolution: ImportResolution,
+                         restorePhotos: Bool = false) {
+        let added = pending.archive.apply(resolution: resolution, existing: pending.existing,
+                                          context: modelContext, restorePhotos: restorePhotos)
         tally(pending.archive, added: added)
         pendingImport = nil
         processNextImport()   // continue with the rest of the batch
@@ -348,7 +350,7 @@ private struct PlayerImportDialogs: ViewModifier {
     let importMessageBinding: Binding<Bool>
     let importMessage: String
     let handleImport: (Result<[URL], Error>) -> Void
-    let resolve: (PendingImport, ImportResolution) -> Void
+    let resolve: (PendingImport, ImportResolution, Bool) -> Void
     let skipCurrentImport: () -> Void
 
     func body(content: Content) -> some View {
@@ -361,9 +363,15 @@ private struct PlayerImportDialogs: ViewModifier {
             .confirmationDialog(duplicateTitle,
                                 isPresented: pendingImportBinding,
                                 presenting: pendingImport) { pending in
-                Button("Merge") { resolve(pending, .merge) }
-                Button("Replace", role: .destructive) { resolve(pending, .replace) }
-                Button("Create New") { resolve(pending, .createNew) }
+                Button("Merge") { resolve(pending, .merge, false) }
+                // Only offer "Restore Photo" when the archive HAS a photo the existing player is
+                // missing — otherwise the button is a no-op. Merge (default) never touches photo
+                // state, so a user who deliberately deleted a photo doesn't get it silently back.
+                if pending.archive.player.photoData != nil && pending.existing.photoData == nil {
+                    Button("Merge & Restore Photo") { resolve(pending, .merge, true) }
+                }
+                Button("Replace", role: .destructive) { resolve(pending, .replace, false) }
+                Button("Create New") { resolve(pending, .createNew, false) }
                 Button("Skip", role: .cancel) { skipCurrentImport() }
             } message: { pending in
                 Text(duplicateMessage(pending))

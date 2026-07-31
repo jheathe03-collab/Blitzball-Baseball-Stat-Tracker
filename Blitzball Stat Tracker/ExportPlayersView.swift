@@ -20,6 +20,9 @@ struct ExportPlayersView: View {
     @State private var shareBundle: ShareBundle?
     @State private var exportError: String?
     @State private var confirmingPhotoExport = false
+    // Non-nil while a background export task is in flight — drives the progress overlay and
+    // disables the Export button so a second tap can't kick off a parallel encode.
+    @State private var exportProgress: ExportProgress?
 
     /// Only players with finished-game history can be exported (an empty archive is pointless).
     private var eligible: [Player] { players.filter { !$0.finalStatLines.isEmpty } }
@@ -60,7 +63,7 @@ struct ExportPlayersView: View {
                         )
                         .fontWeight(.semibold)
                     }
-                    .disabled(selectedCount == 0)
+                    .disabled(selectedCount == 0 || exportProgress != nil)
                 }
             }
             .sheet(item: $shareBundle) { bundle in
@@ -79,6 +82,30 @@ struct ExportPlayersView: View {
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text("Photos make the files larger to share.")
+            }
+            .overlay {
+                if let progress = exportProgress {
+                    // Full-screen dimmer + centred progress card. The dimmer covers every
+                    // interactive control underneath, so a second tap on Export or Cancel
+                    // during encode is physically blocked (belt to the `.disabled` suspenders).
+                    ZStack {
+                        Color.black.opacity(0.55).ignoresSafeArea()
+                        VStack(spacing: 14) {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(1.3)
+                            Text("Exporting \(progress.done) of \(progress.total)…")
+                                .font(.subheadline)
+                                .foregroundStyle(.white)
+                                .monospacedDigit()
+                        }
+                        .padding(24)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                        )
+                    }
+                }
             }
         }
     }
@@ -155,22 +182,62 @@ struct ExportPlayersView: View {
         else { exportSelected(includePhotos: false) }
     }
 
-    /// Write one JSON file per selected player into a temp folder, then present the share sheet.
+    /// Write one JSON file per selected player, then present the share sheet.
+    ///
+    /// Split into two phases so we don't hang the UI on a full league (40 players × 40 KB photos
+    /// = several MB of base64 encoding — synchronous on the main thread was a multi-second freeze
+    /// with no spinner):
+    ///
+    ///   1. **Main actor** — build a `PlayerArchive` struct for each selected player. This has to
+    ///      stay on main because it reads SwiftData `Player` properties. But it's fast (value
+    ///      copies), so it doesn't block visibly.
+    ///   2. **Background task** — encode each archive to JSON (this is where base64 lives) and
+    ///      write to a temp file. After each file, hop back to main to bump the progress counter.
+    ///
+    /// The progress overlay in `body` drives off `exportProgress`; the Export button is disabled
+    /// while it's non-nil so the task can't be double-fired.
     private func exportSelected(includePhotos: Bool) {
-        do {
-            var urls: [URL] = []
-            var usedNames: Set<String> = []
-            for player in eligible where selected.contains(player.persistentModelID) {
-                let data = try PlayerArchive(exporting: player, includePhotos: includePhotos).encoded()
-                let name = uniqueFilename(for: player, used: &usedNames)
-                let url = URL.temporaryDirectory.appending(path: name)
-                try data.write(to: url, options: .atomic)
-                urls.append(url)
+        // Phase 1: snapshot on main.
+        var jobs: [ExportJob] = []
+        var usedNames: Set<String> = []
+        for player in eligible where selected.contains(player.persistentModelID) {
+            let archive = PlayerArchive(exporting: player, includePhotos: includePhotos)
+            let filename = uniqueFilename(for: player, used: &usedNames)
+            jobs.append(ExportJob(archive: archive, filename: filename))
+        }
+        guard !jobs.isEmpty else { return }
+        exportProgress = ExportProgress(done: 0, total: jobs.count)
+
+        // Phase 2: encode + write on a background task. `jobs` is a value-type array of Sendable
+        // structs, so it captures cleanly across the actor boundary.
+        Task.detached(priority: .userInitiated) {
+            var writtenURLs: [URL] = []
+            for job in jobs {
+                do {
+                    let data = try job.archive.encoded()
+                    let url = URL.temporaryDirectory.appending(path: job.filename)
+                    try data.write(to: url, options: .atomic)
+                    writtenURLs.append(url)
+                    // Report progress after each file so the counter ticks up visibly.
+                    let doneCount = writtenURLs.count
+                    let total = jobs.count
+                    await MainActor.run {
+                        exportProgress = ExportProgress(done: doneCount, total: total)
+                    }
+                } catch {
+                    let message = error.localizedDescription
+                    await MainActor.run {
+                        exportProgress = nil
+                        exportError = message
+                    }
+                    return
+                }
             }
-            guard !urls.isEmpty else { return }
-            shareBundle = ShareBundle(urls: urls)
-        } catch {
-            exportError = error.localizedDescription
+            let finalURLs = writtenURLs
+            await MainActor.run {
+                exportProgress = nil
+                shareBundle = ShareBundle(urls: finalURLs)
+            }
         }
     }
 
@@ -200,3 +267,22 @@ private struct ShareBundle: Identifiable {
     let id = UUID()
     let urls: [URL]
 }
+
+/// One snapshot handed to the background encode+write task. Sendable so it can cross actors.
+private struct ExportJob: Sendable {
+    let archive: PlayerArchive
+    let filename: String
+}
+
+/// Counter shown in the export progress overlay.
+private struct ExportProgress {
+    let done: Int
+    let total: Int
+}
+
+// PlayerArchive is a value-type Codable struct — the fields are all Sendable already, but the
+// Swift 6 concurrency checker won't INFER Sendable across module boundaries. Marking it here
+// (unchecked because Data is technically not Sendable-safe by pure spec, but Foundation's Data is
+// value-copied on write and we're only reading from the background task) lets us capture it
+// cleanly in Task.detached.
+extension PlayerArchive: @unchecked Sendable {}

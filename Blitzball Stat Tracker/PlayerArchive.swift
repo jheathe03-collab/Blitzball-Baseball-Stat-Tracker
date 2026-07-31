@@ -181,10 +181,17 @@ extension PlayerArchive {
     }
 
     /// Apply this archive to the store per the chosen resolution.
-    /// - Parameter existing: a stored player with the same name (nil ⇒ createNew).
+    /// - Parameters:
+    ///   - existing: a stored player with the same name (nil ⇒ createNew).
+    ///   - restorePhotos: when `true`, a merge/replace fills in the archive's `photoData` if the
+    ///     existing player doesn't have one. When `false` (the default), the archive's photo is
+    ///     IGNORED for existing players — so a user who intentionally deleted a photo doesn't get
+    ///     it silently repopulated on re-merge. The Import UI exposes this as a separate
+    ///     "Merge & Restore Photo" option so opting in is an explicit user action.
     /// - Returns: the number of stat lines actually inserted (merge skips duplicates).
     @discardableResult
-    func apply(resolution: ImportResolution, existing: Player?, context: ModelContext) -> Int {
+    func apply(resolution: ImportResolution, existing: Player?, context: ModelContext,
+               restorePhotos: Bool = false) -> Int {
         let target: Player
         // Signatures of archived lines already on the target — used to skip duplicates on merge,
         // so re-importing the same file (or a superset) doesn't double-count history.
@@ -197,6 +204,8 @@ extension PlayerArchive {
 
         switch resolution {
         case .createNew:
+            // Brand-new player: photo always comes from the archive (there was no prior deletion
+            // to respect). `restorePhotos` has no meaning here.
             let player = Player(name: player.name, jerseyNumber: player.jerseyNumber,
                                 battingStance: player.battingStance, photoData: safePhoto,
                                 cardTemplate: player.cardTemplate)
@@ -209,7 +218,9 @@ extension PlayerArchive {
             // jerseyNumber: only backfill when the existing player doesn't already have it.
             if existing.jerseyNumber == nil { existing.jerseyNumber = player.jerseyNumber }
             if existing.battingStance == nil { existing.battingStance = player.battingStance }
-            if existing.photoData == nil { existing.photoData = safePhoto }
+            // Photo backfill requires explicit opt-in (see `restorePhotos` doc) so a merge never
+            // silently un-does a user's photo deletion.
+            if existing.photoData == nil && restorePhotos { existing.photoData = safePhoto }
             if existing.cardTemplate == nil { existing.cardTemplate = player.cardTemplate }
             existingKeys = Set(existing.gameStatLines
                 .filter { $0.isArchived && $0.game == nil }
@@ -224,7 +235,7 @@ extension PlayerArchive {
             for line in toDelete { context.delete(line) }
             if existing.jerseyNumber == nil { existing.jerseyNumber = player.jerseyNumber }
             if existing.battingStance == nil { existing.battingStance = player.battingStance }
-            if existing.photoData == nil { existing.photoData = safePhoto }
+            if existing.photoData == nil && restorePhotos { existing.photoData = safePhoto }
             if existing.cardTemplate == nil { existing.cardTemplate = player.cardTemplate }
             target = existing
         }
