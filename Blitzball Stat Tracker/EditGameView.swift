@@ -89,6 +89,7 @@ struct EditPlayerStatsView: View {
                 editStepper("Walks", $line.batting.walks)
                 editStepper("Hit By Pitch", $line.batting.hitByPitch)
                 editStepper("Strikeouts", $line.batting.strikeouts)
+                editStepper("Strikeouts Looking", $line.batting.strikeoutsLooking)
                 editStepper("Sacrifice Flies", $line.batting.sacrificeFlies)
                 editStepper("Stolen Bases", $line.batting.stolenBases)
             }
@@ -100,6 +101,7 @@ struct EditPlayerStatsView: View {
                 editStepper("HR Allowed", $line.pitching.homeRunsAllowed)
                 editStepper("Walks Allowed", $line.pitching.walksAllowed)
                 editStepper("Strikeouts", $line.pitching.strikeouts)
+                editStepper("Strikeouts Looking", $line.pitching.strikeoutsLooking)
                 editStepper("At-Bats Against", $line.pitching.atBatsAgainst)
                 editStepper("Saves", $line.pitching.saves)
                 editStepper("Quality Starts", $line.pitching.qualityStarts)

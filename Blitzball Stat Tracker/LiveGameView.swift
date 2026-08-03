@@ -41,6 +41,8 @@ struct LiveGameView: View {
     // prompt currently on screen (nil when none).
     @State private var resolution: HitResolution?
     @State private var currentScoringPrompt: ScoringPrompt?
+    // Inherited-runner charges from the play just resolved, awaiting confirmation.
+    @State private var inheritedCharges: [InheritedCharge] = []
     // Challenge flow (opt-in via settings.challenges): step 1 asks whose challenge; picking a team
     // stashes it here so step 2 can ask the result (successful/failed).
     @State private var showChallengeTeamPicker = false
@@ -148,6 +150,16 @@ struct LiveGameView: View {
         } message: { prompt in
             Text(prompt.message)
         }
+        // A run went to a pitcher who's no longer on the mound — confirm it, or override.
+        .alert("Inherited Runner Scored", isPresented: inheritedChargeBinding) {
+            Button("Keep", role: .cancel) { inheritedCharges = [] }
+            Button("Charge to \(game.activePitcher?.name ?? "Current Pitcher")") {
+                for charge in inheritedCharges { game.reassignInheritedCharge(charge) }
+                inheritedCharges = []
+            }
+        } message: {
+            Text(inheritedChargeMessage)
+        }
         // Challenge flow (two-step: whose challenge → result). Extracted into its own modifier to
         // keep this view's modifier chain short enough for the Swift type-checker.
         .modifier(ChallengeDialogs(
@@ -211,6 +223,7 @@ struct LiveGameView: View {
         }
         // One undo snapshot covers the whole play (record + every runner placement/score).
         pushUndo()
+        game.lastPlayInheritedCharges = []   // this path resolves across prompts, bypassing `perform`
         game.record(outcome, resolveBasesExternally: true)  // stats/outs/order only — no base moves
         startHitResolution(batter: batter, baseCount: baseCount, hitNoun: hitNoun(outcome))
     }
@@ -354,14 +367,33 @@ struct LiveGameView: View {
         }
     }
 
-    /// After a play fully resolves, surface the Game Over popup if the innings rule ended it.
+    /// After a play fully resolves, confirm any inherited-runner charges and surface the Game Over
+    /// popup if the innings rule ended it.
     private func finishPlay() {
+        if !game.lastPlayInheritedCharges.isEmpty {
+            inheritedCharges = game.lastPlayInheritedCharges
+            game.lastPlayInheritedCharges = []
+        }
         guard game.status == .inProgress else { return }
         if game.isComplete {
             if !reviewingLineScore { showGameOver = true }
         } else {
             reviewingLineScore = false
         }
+    }
+
+    /// Message for the inherited-runner confirmation — who scored and who got billed.
+    private var inheritedChargeMessage: String {
+        let lines = inheritedCharges
+            .map { "\($0.runner) — charged to \($0.chargedTo)" }
+            .joined(separator: "\n")
+        let plural = inheritedCharges.count == 1 ? "" : "s"
+        return "\(lines)\n\nThey were already on base when the current pitcher came in, so the "
+            + "run\(plural) went to the pitcher who put them there."
+    }
+
+    private var inheritedChargeBinding: Binding<Bool> {
+        Binding(get: { !inheritedCharges.isEmpty }, set: { if !$0 { inheritedCharges = [] } })
     }
 
     // MARK: - Undo plumbing
@@ -374,6 +406,7 @@ struct LiveGameView: View {
     /// Snapshot the game, then run the mutating action — so Undo can revert it.
     private func perform(_ action: () -> Void) {
         pushUndo()
+        game.lastPlayInheritedCharges = []   // per-play scratch; finishPlay reads what this play adds
         action()
         finishPlay()
     }

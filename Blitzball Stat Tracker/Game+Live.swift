@@ -194,6 +194,9 @@ extension Game {
         case 1: runnerSecond = player
         default: runnerThird = player
         }
+        // A newly-placed runner goes on the current pitcher's tab; anyone already mapped keeps
+        // their original pitcher, so re-placing runners mid-resolution doesn't lose responsibility.
+        if player != nil { recordResponsibilityForNewRunners() }
     }
 
     private var runnerTokens: [Int?] {
@@ -291,6 +294,7 @@ extension Game {
         runnerFirst  = result.bases[0].flatMap(player(for:))
         runnerSecond = result.bases[1].flatMap(player(for:))
         runnerThird  = result.bases[2].flatMap(player(for:))
+        recordResponsibilityForNewRunners()
     }
 
     private func scoreRun(by player: Player) {
@@ -298,7 +302,7 @@ extension Game {
             line.batting.runsScored += 1
         }
         creditRunToInning()
-        creditRunToPitcher()
+        creditRunToPitcher(for: player)
     }
 
     /// Manually score the runner on `baseIndex` (they advanced home on their own — e.g. from 1st on
@@ -323,9 +327,71 @@ extension Game {
         if battingIsHome { homeInningRuns[index] += 1 } else { awayInningRuns[index] += 1 }
     }
 
-    private func creditRunToPitcher() {
-        activePitcherLine?.pitching.runsAllowed += 1
-        activePitcherLine?.pitching.earnedRuns += 1
+    /// Charge a run to whoever is on the hook for THIS runner. A reliever is never charged for a
+    /// runner he inherited (MLB 9.16) — the run goes to the pitcher who put that runner on base.
+    /// Falls back to the current pitcher when the runner isn't mapped (he put them on himself).
+    private func creditRunToPitcher(for runner: Player) {
+        let responsibleName = runnerResponsibility[runner.name]
+        let line = responsibleName.flatMap(pitcherLine(named:)) ?? activePitcherLine
+        line?.pitching.runsAllowed += 1
+        line?.pitching.earnedRuns += 1
+
+        // Flag it for the live screen when the run went to someone other than the current pitcher.
+        if let responsibleName, responsibleName != activePitcher?.name, line != nil {
+            lastPlayInheritedCharges.append(
+                InheritedCharge(runner: runner.name, chargedTo: responsibleName)
+            )
+        }
+        // He's home — a later trip to the plate this inning starts fresh against whoever is pitching.
+        clearResponsibility(for: runner)
+    }
+
+    /// The fielding side's stat line for a pitcher, by name (mirrors `activePitcherLine`'s matching).
+    private func pitcherLine(named name: String) -> GameStatLine? {
+        statLines.first { $0.player?.name == name && ($0.isDH || $0.isHome != battingIsHome) }
+    }
+
+    // MARK: - Inherited runners
+
+    /// Put every runner now standing on a base on some pitcher's tab. Anyone already mapped keeps
+    /// their original pitcher — that's the whole point, responsibility follows the RUNNER, not the
+    /// base — so this is safe to call after any base change, including the ghost-runners-off
+    /// resolver that briefly lifts everyone off the diamond.
+    func recordResponsibilityForNewRunners() {
+        guard let pitcherName = activePitcher?.name else { return }
+        var map = runnerResponsibility
+        var changed = false
+        for base in 0..<3 {
+            guard let runner = runner(onBase: base), map[runner.name] == nil else { continue }
+            map[runner.name] = pitcherName
+            changed = true
+        }
+        if changed { runnerResponsibility = map }
+    }
+
+    /// Override an inherited-run charge: move its R+ER off the pitcher who was billed and onto the
+    /// pitcher currently on the mound. Used by the "charge to current pitcher instead" prompt.
+    func reassignInheritedCharge(_ charge: InheritedCharge) {
+        guard let from = pitcherLine(named: charge.chargedTo),
+              let to = activePitcherLine, from !== to else { return }
+        from.pitching.runsAllowed = max(0, from.pitching.runsAllowed - 1)
+        from.pitching.earnedRuns = max(0, from.pitching.earnedRuns - 1)
+        to.pitching.runsAllowed += 1
+        to.pitching.earnedRuns += 1
+    }
+
+    /// Hand a runner's tab to someone else — used when a pinch runner takes over the base.
+    func transferResponsibility(from old: Player, to new: Player) {
+        var map = runnerResponsibility
+        guard let pitcherName = map.removeValue(forKey: old.name) else { return }
+        map[new.name] = pitcherName
+        runnerResponsibility = map
+    }
+
+    private func clearResponsibility(for runner: Player) {
+        var map = runnerResponsibility
+        guard map.removeValue(forKey: runner.name) != nil else { return }
+        runnerResponsibility = map
     }
 
     // MARK: - Innings
@@ -336,6 +402,8 @@ extension Game {
         runnerFirst = nil
         runnerSecond = nil
         runnerThird = nil
+        // Nobody is left on base, so no pitcher is on the hook for anyone.
+        runnerResponsibility = [:]
         if isTopInning {
             isTopInning = false
         } else {

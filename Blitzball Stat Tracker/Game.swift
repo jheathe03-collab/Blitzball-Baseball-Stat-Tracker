@@ -112,6 +112,16 @@ final class Game {
     /// neither team; bats in both lineups and can pitch for either. Stats stay personal-only.
     @Relationship var designatedHitter: Player?
 
+    /// Who is on the hook for each runner currently on base — runner name → the name of the pitcher
+    /// who put them there. A relief pitcher is never charged for a runner he inherited (MLB 9.16),
+    /// so a run is billed to this map, not to whoever happens to be on the mound. JSON blob, keyed
+    /// by name to match how the archives serialize runners. Defaulted so old stores migrate as-is.
+    var runnerResponsibilityData: Data = Data()
+
+    /// Runs charged to a pitcher OTHER than the one currently pitching, collected during the play
+    /// being resolved so the live screen can confirm them. Not persisted — it's per-play scratch.
+    @Transient var lastPlayInheritedCharges: [InheritedCharge] = []
+
     /// Every player's stat line for this game. Deleting the game deletes its lines (cascade).
     @Relationship(deleteRule: .cascade, inverse: \GameStatLine.game) var statLines: [GameStatLine] = []
 
@@ -130,11 +140,25 @@ final class Game {
     }
 }
 
+/// One run that was charged to a pitcher who is no longer on the mound (an inherited runner came
+/// around to score). Surfaced after the play so the scorekeeper can confirm or reassign it.
+struct InheritedCharge: Identifiable, Hashable {
+    var id: String { runner }
+    let runner: String
+    let chargedTo: String
+}
+
 extension Game {
     /// This game's rulebook, decoded from its blob. Setting re-encodes it.
     var settings: GameSettings {
         get { BlobCoder.decode(settingsData) ?? .baseballDefaults }
         set { settingsData = BlobCoder.encode(newValue) }
+    }
+
+    /// Runner name → the pitcher responsible for them, decoded from its blob.
+    var runnerResponsibility: [String: String] {
+        get { BlobCoder.decode(runnerResponsibilityData) ?? [:] }
+        set { runnerResponsibilityData = BlobCoder.encode(newValue) }
     }
 
     /// Scoreboard run totals, summed from the per-inning arrays.

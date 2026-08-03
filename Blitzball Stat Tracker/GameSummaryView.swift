@@ -20,6 +20,8 @@ struct GameSummaryView: View {
     // Single-game CSV export (finished games only).
     @State private var exportFile: CSVExportFile?
     @State private var exportError: String?
+    // Post-game stat corrections (finished games only).
+    @State private var editingStats = false
 
     /// The selected team's lines, in batting order (includes subs; excludes the neutral DH).
     private var lines: [GameStatLine] {
@@ -99,15 +101,29 @@ struct GameSummaryView: View {
         .navigationTitle("Game Summary")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // Share just this game's box score. Only offered once the game is final, so the
-            // numbers you send out are complete.
+            // Share or correct this game. Both are only offered once the game is final: the numbers
+            // you send out should be complete, and corrections belong to a finished game.
             if game.status == .final {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: exportGameCSV) {
-                        Label("Export", systemImage: "square.and.arrow.up")
+                    Menu {
+                        Button {
+                            editingStats = true
+                        } label: {
+                            Label("Edit Stats & Score", systemImage: "pencil")
+                        }
+                        Button(action: exportGameCSV) {
+                            Label("Export Spreadsheet (CSV)", systemImage: "square.and.arrow.up")
+                        }
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
                     }
                 }
             }
+        }
+        // Corrections write straight to the stat lines; every derived number (ERA, career totals,
+        // standings) recomputes on the next render.
+        .navigationDestination(isPresented: $editingStats) {
+            EditGameView(game: game)
         }
         .sheet(item: $exportFile) { file in
             ShareSheet(items: [file.url])

@@ -31,6 +31,8 @@ struct GameSnapshot {
     var runnerThird: Player?
     var homePitcher: Player?
     var awayPitcher: Player?
+    /// Who was on the hook for each runner on base (runner name → pitcher name).
+    var runnerResponsibility: [String: String]
     /// Each stat line's batting/pitching, keyed by its stable SwiftData id.
     var lines: [PersistentIdentifier: LineStats]
 
@@ -68,6 +70,7 @@ extension Game {
             runnerThird: runnerThird,
             homePitcher: homePitcher,
             awayPitcher: awayPitcher,
+            runnerResponsibility: runnerResponsibility,
             lines: lines
         )
     }
@@ -94,6 +97,7 @@ extension Game {
         runnerThird = snapshot.runnerThird
         homePitcher = snapshot.homePitcher
         awayPitcher = snapshot.awayPitcher
+        runnerResponsibility = snapshot.runnerResponsibility
         for line in statLines {
             if let saved = snapshot.lines[line.persistentModelID] {
                 line.batting = saved.batting

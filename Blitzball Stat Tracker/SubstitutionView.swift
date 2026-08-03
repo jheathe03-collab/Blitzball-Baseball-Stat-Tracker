@@ -133,8 +133,12 @@ struct SubstitutionView: View {
         if game.homePitcher === outLine.player { game.homePitcher = inPlayer }
         if game.awayPitcher === outLine.player { game.awayPitcher = inPlayer }
 
-        // If they were a ghost runner on base, the sub pinch-runs.
+        // If they were a ghost runner on base, the sub pinch-runs — and inherits whichever pitcher
+        // was on the hook for that runner, so a run still lands on the pitcher who allowed it.
         for base in 0..<3 where game.runner(onBase: base) === outLine.player {
+            if let outPlayer = outLine.player {
+                game.transferResponsibility(from: outPlayer, to: inPlayer)
+            }
             game.setRunner(inPlayer, onBase: base)
         }
 
