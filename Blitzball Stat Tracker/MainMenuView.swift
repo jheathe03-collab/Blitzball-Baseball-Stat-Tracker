@@ -88,9 +88,25 @@ struct MainMenuView: View {
             Text("Welcome")
                 .font(Theme.screenSubtitle)
                 .foregroundStyle(.white.opacity(0.65))
+            Text(AppVersion.display)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.45))
+                .monospacedDigit()
         }
         .padding(.top, 20)
         .padding(.bottom, 8)
+    }
+}
+
+/// The running app's version, read from the bundle so it can never drift from what actually shipped
+/// — useful for telling at a glance whether a device has a build that includes a given fix.
+enum AppVersion {
+    /// Marketing version + build, e.g. "Version 1.0 (2)".
+    static var display: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "Version \(short) (\(build))"
     }
 }
 

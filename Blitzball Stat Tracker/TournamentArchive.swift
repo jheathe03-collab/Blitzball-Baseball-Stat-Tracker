@@ -228,6 +228,7 @@ extension TournamentArchive {
                 // here — that's the right merge behavior (this device already knows them as one).
                 // Non-destructive backfill for the whole profile block — matches PlayerArchive
                 // and SeasonArchive so a bracket round-trip carries the same fields they do.
+                if match.jerseyNumber == nil { match.jerseyNumber = dto.jerseyNumber }
                 if match.battingStance == nil { match.battingStance = dto.battingStance }
                 if match.photoData == nil { match.photoData = safePhoto }
                 if match.cardTemplate == nil { match.cardTemplate = dto.cardTemplate }

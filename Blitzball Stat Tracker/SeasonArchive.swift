@@ -324,6 +324,7 @@ extension SeasonArchive {
                 // here — that's the right merge behavior (this device already knows them as one).
                 // Non-destructively backfill missing profile fields from the archive (matches how
                 // PlayerArchive.apply merges — never overwrites what the device already has).
+                if existing.jerseyNumber == nil { existing.jerseyNumber = dto.jerseyNumber }
                 if existing.battingStance == nil { existing.battingStance = dto.battingStance }
                 if existing.photoData == nil { existing.photoData = safePhoto }
                 if existing.cardTemplate == nil { existing.cardTemplate = dto.cardTemplate }
