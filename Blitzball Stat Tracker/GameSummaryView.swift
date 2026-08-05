@@ -22,6 +22,8 @@ struct GameSummaryView: View {
     @State private var exportError: String?
     // Post-game stat corrections (finished games only).
     @State private var editingStats = false
+    // The play-by-play log for this game.
+    @State private var showingPlays = false
 
     /// The selected team's lines, in batting order (includes subs; excludes the neutral DH).
     private var lines: [GameStatLine] {
@@ -107,6 +109,11 @@ struct GameSummaryView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button {
+                            showingPlays = true
+                        } label: {
+                            Label("Play Summary", systemImage: "list.bullet.rectangle")
+                        }
+                        Button {
                             editingStats = true
                         } label: {
                             Label("Edit Stats & Score", systemImage: "pencil")
@@ -124,6 +131,9 @@ struct GameSummaryView: View {
         // standings) recomputes on the next render.
         .navigationDestination(isPresented: $editingStats) {
             EditGameView(game: game)
+        }
+        .navigationDestination(isPresented: $showingPlays) {
+            PlaySummaryView(game: game, showsCurrentActivity: false)
         }
         .sheet(item: $exportFile) { file in
             ShareSheet(items: [file.url])
@@ -173,7 +183,7 @@ struct GameSummaryView: View {
 
 // MARK: - Batting box score
 
-private struct BattingBox: View {
+struct BattingBox: View {
     let lines: [GameStatLine]
     var showTotals: Bool = true
 
@@ -226,7 +236,7 @@ private struct BattingBox: View {
 
 // MARK: - Pitching box score
 
-private struct PitchingBox: View {
+struct PitchingBox: View {
     let lines: [GameStatLine]
     var showTotals: Bool = true
 

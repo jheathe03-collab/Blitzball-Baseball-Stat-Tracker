@@ -97,6 +97,11 @@ final class Game {
     var homeChallengesWon: Int = 0
     var awayChallengesWon: Int = 0
 
+    /// Fielding errors charged to each team — the line score's "E" column. Defaulted so older
+    /// games migrate as-is (and honestly report zero, since errors weren't tracked back then).
+    var homeErrors: Int = 0
+    var awayErrors: Int = 0
+
     /// The current pitcher for each side. The ACTIVE pitcher is the fielding side's — home
     /// pitches during the top of the inning, away during the bottom.
     @Relationship var homePitcher: Player?
@@ -124,6 +129,10 @@ final class Game {
 
     /// Every player's stat line for this game. Deleting the game deletes its lines (cascade).
     @Relationship(deleteRule: .cascade, inverse: \GameStatLine.game) var statLines: [GameStatLine] = []
+
+    /// This game's play-by-play log, newest last. Deleting the game deletes its plays (cascade).
+    /// Games played before the log existed simply have none.
+    @Relationship(deleteRule: .cascade, inverse: \PlayEvent.game) var plays: [PlayEvent] = []
 
     init(
         createdAt: Date = .now,

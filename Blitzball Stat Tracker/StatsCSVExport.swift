@@ -169,9 +169,11 @@ enum StatsCSV {
         rows.append(["LINE SCORE"])
         rows.append(["Team"] + (1...innings).map { "\($0)" } + ["R", "H", "E"])
         rows.append(lineScoreRow(name: away, runs: game.awayInningRuns, innings: innings,
-                                 total: game.awayScore, hits: game.hits(isHome: false)))
+                                 total: game.awayScore, hits: game.hits(isHome: false),
+                                 errors: game.awayErrors))
         rows.append(lineScoreRow(name: home, runs: game.homeInningRuns, innings: innings,
-                                 total: game.homeScore, hits: game.hits(isHome: true)))
+                                 total: game.homeScore, hits: game.hits(isHome: true),
+                                 errors: game.homeErrors))
         rows.append([])
 
         // Both teams, away first to match the line score above.
@@ -245,12 +247,12 @@ enum StatsCSV {
         }
     }
 
-    /// One line-score row. Innings the team never batted stay blank; errors aren't tracked yet.
+    /// One line-score row. Innings the team never batted stay blank.
     private static func lineScoreRow(name: String, runs: [Int], innings: Int,
-                                     total: Int, hits: Int) -> [String] {
+                                     total: Int, hits: Int, errors: Int) -> [String] {
         var row = [name]
         for i in 0..<innings { row.append(i < runs.count ? "\(runs[i])" : "") }
-        return row + ["\(total)", "\(hits)", "0"]
+        return row + ["\(total)", "\(hits)", "\(errors)"]
     }
 
     // MARK: - Row formatters

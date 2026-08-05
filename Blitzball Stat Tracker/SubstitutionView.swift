@@ -135,12 +135,20 @@ struct SubstitutionView: View {
 
         // If they were a ghost runner on base, the sub pinch-runs — and inherits whichever pitcher
         // was on the hook for that runner, so a run still lands on the pitcher who allowed it.
+        var onBase = false
         for base in 0..<3 where game.runner(onBase: base) === outLine.player {
             if let outPlayer = outLine.player {
                 game.transferResponsibility(from: outPlayer, to: inPlayer)
             }
             game.setRunner(inPlayer, onBase: base)
+            onBase = true
         }
+
+        // Record it so the log names the right player for everything that follows.
+        let verb = onBase ? "pinch runs for" : "replaces"
+        game.logPlay(.substitution, batter: inPlayer,
+                     detail: "\(inPlayer.name) \(verb) \(outLine.player?.name ?? "a player").",
+                     context: modelContext)
 
         dismiss()
     }

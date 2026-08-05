@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import SwiftData   // ModelContext, for inserting play-log entries
 
 extension Game {
 
@@ -225,18 +226,6 @@ extension Game {
         // modes. Raw counting stats above are recorded regardless.
         if !resolveBasesExternally {
         switch outcome {
-        case .single, .double, .triple, .homeRun:
-            let baseCount: Int
-            switch outcome {
-            case .single: baseCount = 1
-            case .double: baseCount = 2
-            case .triple: baseCount = 3
-            default:      baseCount = 4
-            }
-            let advance = settings.ghostRunners
-                ? BaseRunning.advanceOnHit(bases: runnerTokens, batter: 3, baseCount: baseCount)
-                : BaseRunning.advanceForcedHit(bases: runnerTokens, batter: 3, baseCount: baseCount)
-            applyAdvance(advance, batter: batter, batterPlayer: batterPlayer)
         case .walk:
             applyAdvance(
                 BaseRunning.advanceOnWalk(bases: runnerTokens, batter: 3),
@@ -252,7 +241,25 @@ extension Game {
             }
         case .out, .strikeout, .strikeoutLooking:
             break // runners hold
+        case .sacrificeFly:
+            // The runner on third tags and scores; the batter is out (tallied below) but is credited
+            // the RBI. Other runners hold — nudge them on the diamond for the rare extra advance.
+            scoreRunner(onBase: 2, rbiTo: batter)
+        default:
+            // Every outcome that puts the batter on base moves runners the same way, whether he got
+            // there on a hit or on a misplay — `basesReached` is what differs, not the mechanics.
+            if let baseCount = outcome.basesReached {
+                let advance = settings.ghostRunners
+                    ? BaseRunning.advanceOnHit(bases: runnerTokens, batter: 3, baseCount: baseCount)
+                    : BaseRunning.advanceForcedHit(bases: runnerTokens, batter: 3, baseCount: baseCount)
+                applyAdvance(advance, batter: batter, batterPlayer: batterPlayer)
+            }
         }
+        }
+
+        // Charge the fielding team an error (the line score's E column).
+        if outcome.chargesError {
+            if battingIsHome { awayErrors += 1 } else { homeErrors += 1 }
         }
 
         if outcome.isOut {
@@ -305,6 +312,52 @@ extension Game {
         creditRunToPitcher(for: player)
     }
 
+    /// Record a fielder's choice: the batter reaches (an at-bat, no hit), the defense played on the
+    /// runner at `playedOnBase`, and if `runnerOut` that runner is retired — a real out, charged to
+    /// the pitcher and able to end the half-inning. The out is applied BEFORE the batter forces the
+    /// rest, so a retired runner never occupies a base and trailing runners aren't forced by a runner
+    /// who's gone. Anyone the batter forces past third scores (RBI to the batter).
+    func recordFieldersChoice(_ outcome: PlateAppearanceOutcome, playedOnBase: Int?, runnerOut: Bool) {
+        guard let batter = currentBatterLine, let batterPlayer = batter.player else { return }
+        let baseCount = outcome.basesReached ?? 1
+
+        batter.batting.record(outcome)
+        activePitcherLine?.pitching.recordAllowed(outcome)
+
+        // Remember who's on each base, then turn the diamond into runner tokens (0/1/2).
+        let onBase = [runnerFirst, runnerSecond, runnerThird]
+        var tokens: [Int?] = [runnerFirst != nil ? 0 : nil,
+                              runnerSecond != nil ? 1 : nil,
+                              runnerThird != nil ? 2 : nil]
+
+        // The runner the defense retired is gone before the batter forces anyone.
+        if runnerOut, let base = playedOnBase {
+            tokens[base] = nil
+            outs += 1
+            activePitcherLine?.pitching.outsRecorded += 1
+            if battingIsHome { awayPitcherOuts += 1 } else { homePitcherOuts += 1 }
+        }
+
+        let result = BaseRunning.advanceForcedHit(bases: tokens, batter: 3, baseCount: baseCount)
+        func player(for token: Int) -> Player? {
+            switch token {
+            case 0, 1, 2: return onBase[token]
+            case 3:       return batterPlayer
+            default:      return nil
+            }
+        }
+        for token in result.scored { if let scorer = player(for: token) { scoreRun(by: scorer) } }
+        batter.batting.rbi += result.scored.count
+        runnerFirst  = result.bases[0].flatMap(player(for:))
+        runnerSecond = result.bases[1].flatMap(player(for:))
+        runnerThird  = result.bases[2].flatMap(player(for:))
+        recordResponsibilityForNewRunners()
+
+        advanceBatter()
+        // End the half-inning if the fielder's-choice out was the last one.
+        if outs >= settings.outsPerInning && !isComplete { advanceHalfInning() }
+    }
+
     /// Manually score the runner on `baseIndex` (they advanced home on their own — e.g. from 1st on
     /// a triple with ghost runners off), optionally crediting an RBI to `rbiLine`. Clears that base.
     /// Powers the "Run" button; scoring + pitcher runs allowed are handled by `scoreRun`.
@@ -349,6 +402,56 @@ extension Game {
     /// The fielding side's stat line for a pitcher, by name (mirrors `activePitcherLine`'s matching).
     private func pitcherLine(named name: String) -> GameStatLine? {
         statLines.first { $0.player?.name == name && ($0.isDH || $0.isHome != battingIsHome) }
+    }
+
+    // MARK: - Play log
+
+    /// The log in the order things happened.
+    var orderedPlays: [PlayEvent] {
+        plays.sorted { $0.sequence < $1.sequence }
+    }
+
+    /// Append one entry to the play-by-play log.
+    ///
+    /// Callers must pass the state as it was BEFORE the play was applied — recording a plate
+    /// appearance advances the batter and can roll the half-inning over, so reading `currentInning`
+    /// or `currentBatterLine` afterwards describes the NEXT play, not the one being logged.
+    @discardableResult
+    func logPlay(
+        _ kind: PlayEventKind,
+        outcome: PlateAppearanceOutcome? = nil,
+        battedBallType: BattedBallType? = nil,
+        fieldPosition: FieldPosition? = nil,
+        batter: Player? = nil,
+        pitcher: Player? = nil,
+        detail: String = "",
+        runsScored: Int = 0,
+        inning: Int? = nil,
+        isTop: Bool? = nil,
+        outs: Int? = nil,
+        context: ModelContext? = nil
+    ) -> PlayEvent {
+        let event = PlayEvent(
+            game: self,
+            sequence: (plays.map(\.sequence).max() ?? -1) + 1,
+            kind: kind,
+            inning: inning ?? currentInning,
+            isTopInning: isTop ?? isTopInning,
+            outsBefore: outs ?? self.outs,
+            outcome: outcome,
+            battedBallType: battedBallType,
+            fieldPosition: fieldPosition,
+            batter: batter,
+            pitcher: pitcher,
+            detail: detail,
+            runsScored: runsScored,
+            // The running score as of right now — this is called after the play was applied.
+            homeScore: homeScore,
+            awayScore: awayScore
+        )
+        context?.insert(event)
+        plays.append(event)
+        return event
     }
 
     // MARK: - Inherited runners

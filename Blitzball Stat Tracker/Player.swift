@@ -22,6 +22,14 @@ final class Player {
     /// Optional batting stance: "LH" or "RH".
     var battingStance: String?
 
+    /// Compact form for tight spots like the base chips on the field: "James Heatherly" reads as
+    /// "J.Heatherly". A one-word name is left alone.
+    var shortName: String {
+        let parts = name.split(separator: " ")
+        guard parts.count > 1, let initial = parts.first?.first else { return name }
+        return "\(initial).\(parts.dropFirst().joined(separator: " "))"
+    }
+
     /// Optional imported portrait photo for the player's baseball card, stored as a small square
     /// thumbnail (see TeamLogo.squareThumbnail). nil = no photo yet.
     var photoData: Data?

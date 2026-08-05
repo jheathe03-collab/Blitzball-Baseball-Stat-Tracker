@@ -115,6 +115,25 @@ extension PitchingStats {
             qualityStarts: lhs.qualityStarts + rhs.qualityStarts
         )
     }
+
+    /// Subtract one line from another, flooring at zero — used to UNAPPLY a play's credit
+    /// when it is re-classified or moved to another player. A play that was actually applied can
+    /// never underflow; the floor is there so a bug can't produce negative stats.
+    public static func - (lhs: PitchingStats, rhs: PitchingStats) -> PitchingStats {
+        PitchingStats(
+            outsRecorded: max(0, lhs.outsRecorded - rhs.outsRecorded),
+            earnedRuns: max(0, lhs.earnedRuns - rhs.earnedRuns),
+            runsAllowed: max(0, lhs.runsAllowed - rhs.runsAllowed),
+            hitsAllowed: max(0, lhs.hitsAllowed - rhs.hitsAllowed),
+            homeRunsAllowed: max(0, lhs.homeRunsAllowed - rhs.homeRunsAllowed),
+            walksAllowed: max(0, lhs.walksAllowed - rhs.walksAllowed),
+            strikeouts: max(0, lhs.strikeouts - rhs.strikeouts),
+            strikeoutsLooking: max(0, lhs.strikeoutsLooking - rhs.strikeoutsLooking),
+            atBatsAgainst: max(0, lhs.atBatsAgainst - rhs.atBatsAgainst),
+            saves: max(0, lhs.saves - rhs.saves),
+            qualityStarts: max(0, lhs.qualityStarts - rhs.qualityStarts)
+        )
+    }
 }
 
 // MARK: - Lenient decoding (this is what makes adding a stat data-safe)

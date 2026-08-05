@@ -26,6 +26,9 @@ struct GameSnapshot {
     var awayChallengesUsed: Int
     var homeChallengesWon: Int
     var awayChallengesWon: Int
+    /// Fielding errors, so undoing a play that charged one takes it back off the board.
+    var homeErrors: Int
+    var awayErrors: Int
     var runnerFirst: Player?
     var runnerSecond: Player?
     var runnerThird: Player?
@@ -33,12 +36,65 @@ struct GameSnapshot {
     var awayPitcher: Player?
     /// Who was on the hook for each runner on base (runner name → pitcher name).
     var runnerResponsibility: [String: String]
+    /// The play log exactly as it stood. A value copy rather than a high-water mark, because Redo
+    /// has to PUT BACK entries that Undo removed — restoring reconciles both directions.
+    var playRecords: [PlayRecord]
     /// Each stat line's batting/pitching, keyed by its stable SwiftData id.
     var lines: [PersistentIdentifier: LineStats]
 
     struct LineStats {
         var batting: BattingStats
         var pitching: PitchingStats
+    }
+
+    /// A play-log entry captured as a value, so it can be recreated after being deleted.
+    struct PlayRecord {
+        var sequence: Int
+        var kind: PlayEventKind
+        var inning: Int
+        var isTopInning: Bool
+        var outsBefore: Int
+        var outcome: PlateAppearanceOutcome?
+        var battedBallType: BattedBallType?
+        var fieldPosition: FieldPosition?
+        var batter: Player?
+        var pitcher: Player?
+        var detail: String
+        var runsScored: Int
+        var unearnedRuns: Int
+        var homeScore: Int
+        var awayScore: Int
+        var createdAt: Date
+
+        init(_ play: PlayEvent) {
+            sequence = play.sequence
+            kind = play.kind
+            inning = play.inning
+            isTopInning = play.isTopInning
+            outsBefore = play.outsBefore
+            outcome = play.outcome
+            battedBallType = play.battedBallType
+            fieldPosition = play.fieldPosition
+            batter = play.batter
+            pitcher = play.pitcher
+            detail = play.detail
+            runsScored = play.runsScored
+            unearnedRuns = play.unearnedRuns
+            homeScore = play.homeScore
+            awayScore = play.awayScore
+            createdAt = play.createdAt
+        }
+
+        func makeEvent(in game: Game) -> PlayEvent {
+            let event = PlayEvent(game: game, sequence: sequence, kind: kind, inning: inning,
+                                  isTopInning: isTopInning, outsBefore: outsBefore, outcome: outcome,
+                                  battedBallType: battedBallType, fieldPosition: fieldPosition,
+                                  batter: batter, pitcher: pitcher, detail: detail,
+                                  runsScored: runsScored, homeScore: homeScore, awayScore: awayScore,
+                                  createdAt: createdAt)
+            event.unearnedRuns = unearnedRuns
+            return event
+        }
     }
 }
 
@@ -65,18 +121,38 @@ extension Game {
             awayChallengesUsed: awayChallengesUsed,
             homeChallengesWon: homeChallengesWon,
             awayChallengesWon: awayChallengesWon,
+            homeErrors: homeErrors,
+            awayErrors: awayErrors,
             runnerFirst: runnerFirst,
             runnerSecond: runnerSecond,
             runnerThird: runnerThird,
             homePitcher: homePitcher,
             awayPitcher: awayPitcher,
             runnerResponsibility: runnerResponsibility,
+            playRecords: plays.map(GameSnapshot.PlayRecord.init),
             lines: lines
         )
     }
 
     /// Restore a previously captured state (Undo).
-    func restore(from snapshot: GameSnapshot) {
+    ///
+    /// Pass the `context` so play-log entries recorded by the undone action are deleted too —
+    /// without it the log keeps describing a play the game has already taken back.
+    func restore(from snapshot: GameSnapshot, context: ModelContext? = nil) {
+        // Reconcile the log in both directions: drop entries this snapshot never had (Undo), and
+        // recreate any it had that are missing now (Redo).
+        let wanted = Set(snapshot.playRecords.map(\.sequence))
+        for play in plays where !wanted.contains(play.sequence) {
+            play.game = nil
+            context?.delete(play)
+        }
+        plays.removeAll { !wanted.contains($0.sequence) }
+        let present = Set(plays.map(\.sequence))
+        for record in snapshot.playRecords where !present.contains(record.sequence) {
+            let event = record.makeEvent(in: self)
+            context?.insert(event)
+            plays.append(event)
+        }
         currentInning = snapshot.currentInning
         isTopInning = snapshot.isTopInning
         outs = snapshot.outs
@@ -92,6 +168,8 @@ extension Game {
         awayChallengesUsed = snapshot.awayChallengesUsed
         homeChallengesWon = snapshot.homeChallengesWon
         awayChallengesWon = snapshot.awayChallengesWon
+        homeErrors = snapshot.homeErrors
+        awayErrors = snapshot.awayErrors
         runnerFirst = snapshot.runnerFirst
         runnerSecond = snapshot.runnerSecond
         runnerThird = snapshot.runnerThird
