@@ -45,6 +45,12 @@ struct GameSettings: Codable, Hashable, Sendable {
     /// When on, each team pitches from a set rotation that auto-advances every inning. Off by
     /// default (defaulted so old blobs — and the preset calls below — don't need to pass it).
     var forcePitcherRotation: Bool = false
+    /// Track a pitch-by-pitch ball/strike count (the Pitch button + auto walk/strikeout). Off by
+    /// default; defaulted so old blobs and the presets migrate without it.
+    var recordBallsAndStrikes: Bool = false
+    /// Also record the TYPE of each pitch — an enrichment of the above, so it can't be on unless
+    /// `recordBallsAndStrikes` is (the editor enforces the pairing). Off by default.
+    var recordPitchType: Bool = false
 
     // Allowed ranges, kept next to the data so the UI steppers can reuse them.
     static let inningsRange = 1...9
@@ -62,8 +68,19 @@ struct GameSettings: Codable, Hashable, Sendable {
     static let baseballDefaults = GameSettings(
         innings: 9, outsPerInning: 3, extraInnings: true, substitutions: true, allTeamPitch: false,
         maxStrikes: 3, maxBalls: 4, ghostRunners: false, hbpWalks: true, challenges: 2,
-        designatedHitter: false
+        designatedHitter: false,
+        // Baseball tracks the count by default; Pitch Type stays an opt-in enrichment.
+        recordBallsAndStrikes: true
     )
+
+    /// Outs a starter must record for a Quality Start, scaled to this game's length so a shorter game
+    /// has a fair bar: about two-thirds of regulation innings (rounded), times the outs per inning.
+    /// 9-inning baseball → 6 IP (18 outs); 7-inning blitzball → 5 IP (15 outs). Pairs with the ≤3
+    /// earned-runs cap the award check applies.
+    var qualityStartOutsThreshold: Int {
+        let qsInnings = max(1, Int((Double(innings) * 2.0 / 3.0).rounded()))
+        return qsInnings * outsPerInning
+    }
 
     /// Which preset the current values match — or `.custom` if they match neither. Because this
     /// compares the whole struct (Equatable via Hashable), editing any single field away from a
@@ -83,7 +100,7 @@ extension GameSettings {
     private enum CodingKeys: String, CodingKey {
         case innings, outsPerInning, extraInnings, substitutions, allTeamPitch
         case maxStrikes, maxBalls, ghostRunners, hbpWalks, challenges, designatedHitter
-        case forcePitcherRotation
+        case forcePitcherRotation, recordBallsAndStrikes, recordPitchType
     }
 
     // Games saved BEFORE `outsPerInning` existed still load (defaulting to 3) instead of failing
@@ -101,7 +118,9 @@ extension GameSettings {
         hbpWalks = try c.decode(Bool.self, forKey: .hbpWalks)
         challenges = try c.decode(Int.self, forKey: .challenges)
         designatedHitter = try c.decode(Bool.self, forKey: .designatedHitter)
-        // Games saved before this option existed load with it OFF.
+        // Games saved before these options existed load with them OFF.
         forcePitcherRotation = try c.decodeIfPresent(Bool.self, forKey: .forcePitcherRotation) ?? false
+        recordBallsAndStrikes = try c.decodeIfPresent(Bool.self, forKey: .recordBallsAndStrikes) ?? false
+        recordPitchType = try c.decodeIfPresent(Bool.self, forKey: .recordPitchType) ?? false
     }
 }

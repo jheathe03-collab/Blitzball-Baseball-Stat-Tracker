@@ -33,6 +33,8 @@ struct CurrentGameOptionsView: View {
                     optionRow("Ghost Runners", onOff(settings.ghostRunners))
                     optionRow("HBP Walks", onOff(settings.hbpWalks))
                     optionRow("Designated Hitter", onOff(settings.designatedHitter))
+                    optionRow("Record Balls and Strikes", onOff(settings.recordBallsAndStrikes))
+                    optionRow("Record Pitch Type", onOff(settings.recordPitchType))
                     optionRow("Challenges", settings.challenges == 0 ? "Off" : "\(settings.challenges)")
                 }
                 .blitzCardRow()

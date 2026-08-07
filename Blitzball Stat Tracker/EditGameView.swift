@@ -106,6 +106,7 @@ struct EditPlayerStatsView: View {
                 editStepper("At-Bats Against", $line.pitching.atBatsAgainst)
                 editStepper("Saves", $line.pitching.saves)
                 editStepper("Quality Starts", $line.pitching.qualityStarts)
+                editStepper("Blown Saves", $line.pitching.blownSaves)
             }
         }
         .navigationTitle(line.player?.name ?? "Edit Player")

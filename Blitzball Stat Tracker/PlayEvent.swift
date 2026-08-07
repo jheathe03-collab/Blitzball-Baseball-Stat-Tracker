@@ -27,6 +27,7 @@ enum PlayEventKind: String, Codable, CaseIterable {
     case steal
     case caughtStealing
     case baserunning   // other advances/outs on the bases (errors, indifference, pickoff, appeal…)
+    case pitch         // a single tracked pitch (type + call), for the pitch-by-pitch log
 }
 
 @Model
@@ -171,6 +172,7 @@ extension PlayEvent {
         case .steal:          return "Stolen Base"
         case .caughtStealing: return "Caught Stealing"
         case .baserunning:    return "Baserunning"
+        case .pitch:          return "Pitch"
         case .plateAppearance: return "Plate Appearance"
         }
     }
@@ -193,6 +195,10 @@ extension PlayEvent {
             return parts.joined(separator: ". ") + "."
         }
         var first = "\(who) \(outcome.pastTenseDescription)"
+        // A pitch-tracked strikeout names the pitch that got him ("… on a Slider").
+        if (outcome == .strikeout || outcome == .strikeoutLooking), !detail.isEmpty {
+            first += " on a \(detail)"
+        }
         // Error / fielder's-choice plays carry a fielder but no contact type — name them inline:
         // "reaches on an error by the shortstop".
         if battedBallType == nil, outcome.isReachedOnMisplay, let position = fieldPosition {

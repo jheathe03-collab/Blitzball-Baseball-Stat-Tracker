@@ -38,6 +38,12 @@ struct GameTeamView: View {
 
     private var pitcher: Player? { isHome ? game.homePitcher : game.awayPitcher }
 
+    /// This team's pitching rotation, in order (Force Pitcher Rotation only). Mirrors the pregame
+    /// editor's read: team lines with a rotation slot, sorted by it.
+    private var rotationLines: [GameStatLine] {
+        teamBatters.filter { $0.pitchingOrder >= 0 }.sorted { $0.pitchingOrder < $1.pitchingOrder }
+    }
+
     var body: some View {
         List {
             Section {
@@ -81,6 +87,28 @@ struct GameTeamView: View {
                     .foregroundStyle(.white.opacity(0.55))
             }
             .blitzCardRow()
+
+            // The pitching rotation (Force Pitcher Rotation only): the order pitchers take the mound,
+            // reorderable just like the batting order.
+            if game.settings.forcePitcherRotation {
+                Section {
+                    if rotationLines.isEmpty {
+                        Text("No pitching rotation set.").foregroundStyle(.white.opacity(0.6))
+                    } else {
+                        ForEach(Array(rotationLines.enumerated()), id: \.element.persistentModelID) { index, line in
+                            pitcherRow(line, position: index + 1)
+                        }
+                        .onMove(perform: moveRotation)
+                    }
+                } header: {
+                    Text("Pitching Rotation").foregroundStyle(.white)
+                } footer: {
+                    Text("Each inning the next pitcher takes the mound, looping after the last. Tap Edit, "
+                         + "then drag to reorder — the pitcher on the mound now stays put.")
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                .blitzCardRow()
+            }
 
             if !bench.isEmpty {
                 Section {
@@ -142,6 +170,11 @@ struct GameTeamView: View {
                     .font(.caption2).foregroundStyle(.black)
                     .padding(.horizontal, 6).padding(.vertical, 1)
                     .background(.yellow, in: Capsule())
+            } else if line.player === game.onDeckBatterLine?.player {
+                Text("on deck")
+                    .font(.caption2).foregroundStyle(.black)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(.cyan, in: Capsule())
             }
             Spacer()
             if let number = line.player?.jerseyNumber {
@@ -158,5 +191,34 @@ struct GameTeamView: View {
         for (index, line) in ordered.enumerated() {
             line.battingOrder = index
         }
+    }
+
+    /// One pitching-rotation row: slot number, name, a "pitching" badge for whoever's on the mound
+    /// now, and jersey number.
+    private func pitcherRow(_ line: GameStatLine, position: Int) -> some View {
+        HStack {
+            Text("\(position).")
+                .foregroundStyle(.white.opacity(0.5)).monospacedDigit()
+            Text(line.player?.name ?? "—").foregroundStyle(.white)
+            if line.player === pitcher {
+                Text("pitching")
+                    .font(.caption2).foregroundStyle(.black)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(.green, in: Capsule())
+            }
+            Spacer()
+            if let number = line.player?.jerseyNumber {
+                Text("#\(number)").foregroundStyle(.white.opacity(0.6))
+            }
+        }
+    }
+
+    /// Reorder the pitching rotation (rewrites each line's `pitchingOrder`). Unlike the pregame editor
+    /// we DON'T resync the starting pitcher: mid-game the pitcher on the mound is whoever's there now,
+    /// and the new order just changes which pitcher the rotation schedules for upcoming innings.
+    private func moveRotation(from source: IndexSet, to destination: Int) {
+        var ordered = rotationLines
+        ordered.move(fromOffsets: source, toOffset: destination)
+        for (index, line) in ordered.enumerated() { line.pitchingOrder = index }
     }
 }

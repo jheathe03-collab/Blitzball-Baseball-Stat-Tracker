@@ -173,6 +173,7 @@ struct PlayerDetailView: View {
             StatCell(label: "Kʟ", value: String(pitching.strikeoutsLooking))
             StatCell(label: "SV", value: String(pitching.saves))
             StatCell(label: "QS", value: String(pitching.qualityStarts))
+            StatCell(label: "BS", value: String(pitching.blownSaves))
         }
         .blitzCardRow()
     }

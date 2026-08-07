@@ -59,6 +59,18 @@ struct GameSettingsEditor: View {
                 Toggle("HBP Walks", isOn: $draft.hbpWalks)
                 Toggle("Designated Hitter", isOn: $draft.designatedHitter)
 
+                // Turning off ball/strike tracking also turns off pitch-type tracking (the pair).
+                Toggle("Record Balls and Strikes", isOn: Binding(
+                    get: { draft.recordBallsAndStrikes },
+                    set: { on in
+                        draft.recordBallsAndStrikes = on
+                        if !on { draft.recordPitchType = false }
+                    }
+                ))
+                // Pitch type enriches ball/strike tracking, so it can't be enabled on its own.
+                Toggle("Record Pitch Type", isOn: $draft.recordPitchType)
+                    .disabled(!draft.recordBallsAndStrikes)
+
                 Stepper("Challenges: \(draft.challenges)",
                         value: $draft.challenges, in: GameSettings.challengesRange)
             }

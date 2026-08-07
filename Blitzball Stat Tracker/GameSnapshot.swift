@@ -28,6 +28,14 @@ struct GameSnapshot {
     var awayChallengesWon: Int
     /// The per-challenge log, so undoing a challenge drops its recap entry too.
     var challengeCalls: [ChallengeCall]
+    /// Save/Blown-Save entry context per side, so undoing a rotation change or a lead-erasing run
+    /// restores exactly who was protecting what.
+    var homeSaveEntryLead: Int
+    var awaySaveEntryLead: Int
+    var homeSaveEntryOuts: Int
+    var awaySaveEntryOuts: Int
+    var homeBlownSaveCharged: Bool
+    var awayBlownSaveCharged: Bool
     /// Fielding errors, so undoing a play that charged one takes it back off the board.
     var homeErrors: Int
     var awayErrors: Int
@@ -127,6 +135,12 @@ extension Game {
             homeChallengesWon: homeChallengesWon,
             awayChallengesWon: awayChallengesWon,
             challengeCalls: challengeCalls,
+            homeSaveEntryLead: homeSaveEntryLead,
+            awaySaveEntryLead: awaySaveEntryLead,
+            homeSaveEntryOuts: homeSaveEntryOuts,
+            awaySaveEntryOuts: awaySaveEntryOuts,
+            homeBlownSaveCharged: homeBlownSaveCharged,
+            awayBlownSaveCharged: awayBlownSaveCharged,
             homeErrors: homeErrors,
             awayErrors: awayErrors,
             runnerFirst: runnerFirst,
@@ -175,6 +189,12 @@ extension Game {
         homeChallengesWon = snapshot.homeChallengesWon
         awayChallengesWon = snapshot.awayChallengesWon
         challengeCalls = snapshot.challengeCalls
+        homeSaveEntryLead = snapshot.homeSaveEntryLead
+        awaySaveEntryLead = snapshot.awaySaveEntryLead
+        homeSaveEntryOuts = snapshot.homeSaveEntryOuts
+        awaySaveEntryOuts = snapshot.awaySaveEntryOuts
+        homeBlownSaveCharged = snapshot.homeBlownSaveCharged
+        awayBlownSaveCharged = snapshot.awayBlownSaveCharged
         homeErrors = snapshot.homeErrors
         awayErrors = snapshot.awayErrors
         runnerFirst = snapshot.runnerFirst

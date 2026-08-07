@@ -235,6 +235,19 @@ struct SelectTeamsView: View {
                 }
             }
 
+            // Review and delete finished exhibition games, all in one place (no more digging into a
+            // player's stats to remove a game).
+            Section {
+                NavigationLink {
+                    ExhibitionHistoryView()
+                } label: {
+                    Label("Previous Games", systemImage: "clock.arrow.circlepath")
+                }
+            } footer: {
+                Text("View or delete finished exhibition games.")
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+
             // Jump back into a game that was started but never finished (e.g. the app closed
             // mid-game). Only shown when such a game exists.
             if let resumable = resumableGame {

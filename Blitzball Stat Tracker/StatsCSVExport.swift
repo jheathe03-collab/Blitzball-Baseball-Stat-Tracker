@@ -19,7 +19,7 @@ enum StatsCSV {
          "AVG", "OBP", "SLG", "OPS"]
 
     private static let pitchingHeaders =
-        ["IP", "Outs", "H", "R", "ER", "HR", "BB", "SO", "SOL", "BAA", "ERA", "WHIP", "K/BB", "SV", "QS"]
+        ["IP", "Outs", "H", "R", "ER", "HR", "BB", "SO", "SOL", "BAA", "ERA", "WHIP", "K/BB", "SV", "QS", "BS"]
 
     // MARK: - Public builders
 
@@ -272,7 +272,7 @@ enum StatsCSV {
                 "\(p.earnedRuns)", "\(p.homeRunsAllowed)", "\(p.walksAllowed)", "\(p.strikeouts)",
                 "\(p.strikeoutsLooking)",
                 rate(p.battingAverageAgainst), ratio(p.earnedRunAverage), ratio(p.walksAndHitsPerInning),
-                kbb, "\(p.saves)", "\(p.qualityStarts)"]
+                kbb, "\(p.saves)", "\(p.qualityStarts)", "\(p.blownSaves)"]
     }
 
     // MARK: - Season participant derivation (mirrors SeasonStatsDetailView)

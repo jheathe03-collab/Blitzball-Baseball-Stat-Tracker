@@ -56,6 +56,14 @@ struct LiveGameView: View {
     // appearance. Nothing here feeds the stat lines yet.
     @State private var balls = 0
     @State private var strikes = 0
+    // Pitch-by-pitch tracking (Record Balls and Strikes): the Pitch menu, its Dropped-3rd sub-menu, and
+    // — with Record Pitch Type on — a pitch-type prompt shown after a count pitch is chosen.
+    @State private var showPitchMenu = false
+    @State private var showDroppedThird = false
+    // The action a pitch-sheet row picked, run in the sheet's onDismiss so any follow-up (a batted-ball
+    // capture, the pitch-type prompt) presents cleanly after the sheet is gone rather than racing it.
+    @State private var pitchSheetAction: (() -> Void)?
+    @State private var pendingPitchType: PitchCall?
     // Pushed from the game menu (previously stacked buttons under the pad).
     @State private var showEditStats = false
     @State private var showSummary = false
@@ -140,14 +148,14 @@ struct LiveGameView: View {
     /// The whole header renders in light mode so its semantic-colored text — including the reused
     /// LineScore — comes out dark on the silver card, matching the design.
     private var headerCard: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
             countCluster
             headerDivider
             scoreboardGrid
             headerDivider
             LineScore(game: game, onAdjust: adjustInningRuns, centered: true)
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
+        .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
         .background(
             // Brushed-metal silver: a light top, a soft dip, and a light base.
             LinearGradient(stops: [
@@ -159,17 +167,19 @@ struct LiveGameView: View {
         .environment(\.colorScheme, .light)
     }
 
-    /// "TOP 1ST — 0 OUTS" on the left, the tappable ball/strike count on the right.
+    /// "TOP 1ST — 0 OUTS" on the left, and — only when ball/strike tracking is on — the count on the right.
     private var countCluster: some View {
         HStack {
             Text("\(game.halfInningLabel.uppercased()) — \(game.outs) OUT\(game.outs == 1 ? "" : "S")")
                 .font(.callout.weight(.heavy))
             Spacer()
-            countChip(value: strikes, letter: "S") {
-                strikes = strikes + 1 >= game.settings.maxStrikes ? 0 : strikes + 1
-            }
-            countChip(value: balls, letter: "B") {
-                balls = balls + 1 >= game.settings.maxBalls ? 0 : balls + 1
+            if game.settings.recordBallsAndStrikes {
+                countChip(value: strikes, letter: "S") {
+                    strikes = strikes + 1 >= game.settings.maxStrikes ? 0 : strikes + 1
+                }
+                countChip(value: balls, letter: "B") {
+                    balls = balls + 1 >= game.settings.maxBalls ? 0 : balls + 1
+                }
             }
         }
         .foregroundStyle(.black)
@@ -186,6 +196,9 @@ struct LiveGameView: View {
             .foregroundStyle(.black)
         }
         .buttonStyle(.plain)
+        // With ball/strike tracking on, the Pitch button drives the count — tapping it would fight the
+        // auto walk/strikeout, so it's display-only then.
+        .disabled(game.settings.recordBallsAndStrikes)
     }
 
     /// Team01 (gold) · score | score · Team02, with At Bat / Pitching underneath and Edit links
@@ -235,6 +248,10 @@ struct LiveGameView: View {
         let who = isBatting ? game.currentBatterLine?.player : game.activePitcher
         let align: HorizontalAlignment = isHome ? .trailing : .leading
         return VStack(alignment: align, spacing: 0) {
+            // Fixed role label (unlike the batting/fielding status below, which swaps each half-inning).
+            Text(isHome ? "HOME" : "AWAY")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.black.opacity(0.45))
             Text(team?.name ?? (isHome ? "Home" : "Away"))
                 .font(.callout.weight(isBatting ? .semibold : .medium))
                 .foregroundStyle(isBatting ? battingNameColor : .black)
@@ -362,7 +379,16 @@ struct LiveGameView: View {
                 ForEach(cardRowOne, id: \.self) { padCard($0) }
             }
             HStack(spacing: 8) {
-                ForEach(cardRowTwo, id: \.self) { padCard($0) }
+                if game.settings.recordBallsAndStrikes {
+                    // With pitch tracking on, the K/Kl/Out slots become the most-used pitch calls.
+                    pitchShortcutCard("Swing & Miss", icon: "figure.baseball", call: .swingingStrike)
+                    pitchShortcutCard("Called Strike", icon: "hand.raised.fill", call: .calledStrike)
+                    pitchShortcutCard("Ball", icon: "baseball.fill", call: .ball)
+                    if game.settings.hbpWalks { padCard(.hitByPitch) }
+                    pitchCard
+                } else {
+                    ForEach(cardRowTwo, id: \.self) { padCard($0) }
+                }
                 Spacer(minLength: 0)
             }
         }
@@ -417,6 +443,10 @@ struct LiveGameView: View {
         if game.settings.hbpWalks { row.append(.hitByPitch) }
         return row
     }
+    /// What the Pitch menu's "Ball In Play" shortcut offers — the batted outcomes from the pad.
+    private var ballInPlayOutcomes: [PlateAppearanceOutcome] {
+        [.single, .double, .triple, .homeRun, .out]
+    }
 
     /// SF Symbol for each outcome, matching the DetailsPro mockup.
     private func symbol(for outcome: PlateAppearanceOutcome) -> String {
@@ -432,16 +462,22 @@ struct LiveGameView: View {
     }
 
     /// An outcome card: icon over label. Hits + walk are dark; strikeouts + outs are blue.
+    /// Begin recording an outcome the way the pad does: batted balls (hits + in-play outs) first
+    /// capture contact type and location; walks/strikeouts/HBP record straight through. Shared by the
+    /// pad cards and the Pitch menu's "Ball In Play" shortcut.
+    private func selectOutcome(_ outcome: PlateAppearanceOutcome) {
+        if needsBattedCapture(outcome) {
+            battedCapture = BattedCapture(outcome: outcome)
+        } else {
+            recordOutcome(outcome)
+        }
+    }
+
     private func padCard(_ outcome: PlateAppearanceOutcome) -> some View {
-        let isOutcomeBlue = outcome.isOut
+        // Outs are blue; HBP rides along so the whole second row (K/Kl/Out/HBP) reads as one blue set.
+        let isOutcomeBlue = outcome.isOut || outcome == .hitByPitch
         return Button {
-            // Batted balls (hits + in-play outs) first capture contact type and location; walks,
-            // strikeouts, and HBP have no batted ball, so they record straight through.
-            if needsBattedCapture(outcome) {
-                battedCapture = BattedCapture(outcome: outcome)
-            } else {
-                recordOutcome(outcome)
-            }
+            selectOutcome(outcome)
         } label: {
             VStack(spacing: 3) {
                 Image(systemName: symbol(for: outcome)).font(.title3)
@@ -453,6 +489,169 @@ struct LiveGameView: View {
                         in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+    }
+
+    /// A blue pad shortcut for a common pitch call (Record Balls and Strikes on) — same size as the
+    /// other pad cards. Routes through `pitchAction`, so it asks the pitch type when that's on too.
+    private func pitchShortcutCard(_ label: String, icon: String, call: PitchCall) -> some View {
+        Button { pitchAction(call)() } label: {
+            VStack(spacing: 3) {
+                Image(systemName: icon).font(.title3)
+                Text(label)
+                    .font(.caption2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+            }
+            .foregroundStyle(.white)
+            .frame(width: 62, height: 60)
+            .background(Color.blue, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The red "Pitch" pad button — opens the pitch sheet. Same card look as the other pad cards.
+    private var pitchCard: some View {
+        Button { showPitchMenu = true } label: {
+            VStack(spacing: 3) {
+                Image(systemName: "baseball.fill").font(.title3)
+                Text("Pitch").font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(width: 62, height: 60)
+            .background(Color.red, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The pitch menu as a grouped bottom sheet (matching the Contact sheet): Ball In Play sits in its
+    /// own divided section, the pitch calls in another. Row taps stash their action and dismiss; the
+    /// sheet's onDismiss runs it, so any follow-up (contact capture, pitch-type prompt) presents cleanly.
+    private var pitchMenuSheet: some View {
+        NavigationStack {
+            List {
+                Section {
+                    // A single row that drills into the 1B/2B/3B/HR/Out options, so the sheet stays short.
+                    NavigationLink {
+                        ballInPlaySubPage
+                    } label: {
+                        Label("Ball In Play", systemImage: "figure.baseball")
+                    }
+                }
+                // Swing & Miss / Called Strike / Ball live on the pad now; the sheet keeps the rest.
+                Section("Pitch") {
+                    pitchSheetRow("Foul Ball") { choosePitch(pitchAction(.foul)) }
+                    pitchSheetRow("Intentional Walk") { choosePitch { recordOutcome(.walk) } }
+                    if inTwoStrikeZone {
+                        pitchSheetRow("Foul Tip Out") { choosePitch { recordOutcome(.strikeout) } }
+                        pitchSheetRow("Dropped 3rd Strike") { choosePitch { showDroppedThird = true } }
+                    }
+                    pitchSheetRow("Batter Out (Other)") { choosePitch { recordOutcome(.out) } }
+                }
+            }
+            .navigationTitle("Pitch")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showPitchMenu = false } }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    /// The Ball In Play sub-page — the batted outcomes, reached from the pitch sheet's "Ball In Play"
+    /// row. Picking one dismisses the whole sheet and runs the pad's normal capture flow.
+    private var ballInPlaySubPage: some View {
+        List {
+            ForEach(ballInPlayOutcomes, id: \.self) { outcome in
+                pitchSheetRow(outcome.label) { choosePitch { selectOutcome(outcome) } }
+            }
+        }
+        .navigationTitle("Ball In Play")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// A pitch-sheet row: label + disclosure chevron, matching the Contact sheet's rows.
+    private func pitchSheetRow(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title).foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    /// What a count pitch does: ask its type first (Record Pitch Type on) or apply straight away.
+    private func pitchAction(_ call: PitchCall) -> () -> Void {
+        game.settings.recordPitchType ? { pendingPitchType = call } : { applyPitch(call, type: nil) }
+    }
+
+    /// Stash a chosen pitch action and dismiss the sheet; `runPitchSheetAction` runs it once we're gone.
+    private func choosePitch(_ action: @escaping () -> Void) {
+        pitchSheetAction = action
+        showPitchMenu = false
+    }
+
+    private func runPitchSheetAction() {
+        let action = pitchSheetAction
+        pitchSheetAction = nil
+        action?()
+    }
+
+    // MARK: - Pitch tracking (Record Balls and Strikes)
+
+    /// The count is deep enough for the extra menu options (foul tip out, dropped third): two strikes,
+    /// or one short of the allowed max when that's fewer.
+    private var inTwoStrikeZone: Bool {
+        strikes >= min(2, game.settings.maxStrikes - 1)
+    }
+
+    private var pitchTypeBinding: Binding<Bool> {
+        Binding(get: { pendingPitchType != nil }, set: { if !$0 { pendingPitchType = nil } })
+    }
+
+    /// Apply a count pitch: bump the count (a foul advances only up to the brink), log it with its type
+    /// when we have one, then record the terminal outcome once the count fills.
+    private func applyPitch(_ call: PitchCall, type: PitchType?) {
+        switch call {
+        case .calledStrike, .swingingStrike: strikes += 1
+        case .ball:                          balls += 1
+        case .foul:                          if strikes < game.settings.maxStrikes - 1 { strikes += 1 }
+        }
+        if let type {
+            game.logPlay(.pitch, detail: "\(type.label) — \(call.logLabel) (\(balls)-\(strikes))",
+                         context: modelContext)
+        }
+        switch call {
+        case .calledStrike:   if strikes >= game.settings.maxStrikes {
+            recordOutcome(.strikeoutLooking, strikeoutPitch: type?.label)
+        }
+        case .swingingStrike: if strikes >= game.settings.maxStrikes {
+            recordOutcome(.strikeout, strikeoutPitch: type?.label)
+        }
+        case .ball:           if balls >= game.settings.maxBalls { recordOutcome(.walk) }
+        case .foul:           break
+        }
+    }
+
+    /// Dropped third strike where the batter reached first — a strikeout with no out, batter safe at
+    /// first (forcing runners like a walk). Logged as a strikeout plus a note on how he reached.
+    private func droppedThirdStrikeReached(wildPitch: Bool) {
+        balls = 0; strikes = 0
+        let batter = game.currentBatterLine?.player
+        let inning = game.currentInning, isTop = game.isTopInning, outs = game.outs
+        let runsBefore = game.homeScore + game.awayScore
+        perform {
+            game.recordDroppedThirdStrike(wildPitch: wildPitch)
+            let runs = max(0, (game.homeScore + game.awayScore) - runsBefore)
+            game.logPlay(.plateAppearance, outcome: .strikeout, batter: batter, pitcher: game.activePitcher,
+                         runsScored: runs, inning: inning, isTop: isTop, outs: outs, context: modelContext)
+            let note = "\(batter?.name ?? "Batter") reaches first on a "
+                + "\(wildPitch ? "wild pitch" : "passed ball") (dropped third strike)."
+            game.logPlay(.baserunning, batter: batter, pitcher: game.activePitcher,
+                         detail: note, context: modelContext)
+        }
     }
 
     private func circleButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
@@ -585,6 +784,24 @@ struct LiveGameView: View {
                 }
             }
             Button("Cancel", role: .cancel) { }
+        }
+        // The pitch menu (Record Balls and Strikes) — a grouped bottom sheet. A picked row's action runs
+        // in onDismiss so any follow-up presents cleanly once this sheet is gone.
+        .sheet(isPresented: $showPitchMenu, onDismiss: runPitchSheetAction) { pitchMenuSheet }
+        // Dropped 3rd Strike sub-choice — how the batter reached first.
+        .confirmationDialog("Dropped 3rd Strike", isPresented: $showDroppedThird, titleVisibility: .visible) {
+            Button("Reached Base — Wild Pitch") { droppedThirdStrikeReached(wildPitch: true) }
+            Button("Reached Base — Passed Ball") { droppedThirdStrikeReached(wildPitch: false) }
+            Button("Cancel", role: .cancel) { }
+        }
+        // Pitch-type prompt (Record Pitch Type) — shown after a count pitch is chosen from the menu.
+        .confirmationDialog("Pitch Type", isPresented: pitchTypeBinding, titleVisibility: .visible) {
+            ForEach(PitchType.allCases) { type in
+                Button(type.label) {
+                    if let call = pendingPitchType { pendingPitchType = nil; applyPitch(call, type: type) }
+                }
+            }
+            Button("Cancel", role: .cancel) { pendingPitchType = nil }
         }
         .sheet(item: $runToScore) { run in
             RBIPicker(lineup: game.battingLineup, justBatted: game.previousBatterLine) { rbiLine in
@@ -1089,12 +1306,14 @@ struct LiveGameView: View {
         }
     }
 
-    /// Entry point for every outcome button. Ghost-runners-OFF hits (1B/2B/3B) run the interactive
-    /// station-to-station resolver; everything else (ghost-ON, HR, walks, outs) records directly.
+    /// Entry point for every outcome button. Hits (1B/2B/3B) run the station-to-station resolver so the
+    /// runners trot the bases — interactively when ghost runners are off, and forced/prompt-free when
+    /// they're on. HR has its own trot; walks/outs and the rest record directly.
     private func recordOutcome(_ outcome: PlateAppearanceOutcome,
                                battedBallType: BattedBallType? = nil,
                                fieldPosition: FieldPosition? = nil,
-                               battedOutType: BattedOutType? = nil) {
+                               battedOutType: BattedOutType? = nil,
+                               strikeoutPitch: String? = nil) {
         // A fielder's choice needs the "which runner / safe or out?" prompts before anything is
         // applied, so it takes its own path (the fielder location has already been chosen).
         if outcome.isFieldersChoice {
@@ -1112,7 +1331,8 @@ struct LiveGameView: View {
                               inning: game.currentInning,
                               isTop: game.isTopInning,
                               outs: game.outs,
-                              runsBefore: game.homeScore + game.awayScore)
+                              runsBefore: game.homeScore + game.awayScore,
+                              strikeoutPitch: strikeoutPitch)
 
         // A home run sends everyone around the bases — its own trot, regardless of ghost-runner mode.
         if outcome == .homeRun {
@@ -1125,8 +1345,10 @@ struct LiveGameView: View {
             return
         }
 
-        guard !game.settings.ghostRunners,
-              let baseCount = hitBaseCount(outcome),
+        // Hits (1B/2B/3B and their reach variants) run the traveler resolver in BOTH ghost modes, so the
+        // runners trot the bases either way. Ghost-OFF asks about discretionary advances; ghost-ON forces
+        // every advance and skips the prompts (see `resolveHitStep`). Everything else records directly.
+        guard let baseCount = hitBaseCount(outcome),
               let batter = game.currentBatterLine?.player
         else {
             balls = 0; strikes = 0   // the plate appearance is over
@@ -1137,7 +1359,7 @@ struct LiveGameView: View {
         balls = 0; strikes = 0   // the plate appearance is over
         // One undo snapshot covers the whole play (record + every runner placement/score).
         pushUndo()
-        game.lastPlayInheritedCharges = []   // this path resolves across prompts, bypassing `perform`
+        game.lastPlayInheritedCharges = []   // this path resolves outside `perform`
         pendingPlay = draft
         game.record(outcome, resolveBasesExternally: true)  // stats/outs/order only — no base moves
         startHitResolution(batter: batter, baseCount: baseCount, hitNoun: hitNoun(outcome))
@@ -1247,6 +1469,9 @@ struct LiveGameView: View {
     /// runner who holds blocks those behind him from stacking or passing.
     private func resolveHitStep() {
         guard var res = resolution else { return }
+        // Ghost runners ON = every runner is forced up by the hit, so there are no decisions — we skip
+        // the "did he score / take the extra base?" prompts and just trot everyone to their bag/home.
+        let promptless = game.settings.ghostRunners
         while res.index < res.runners.count {
             let (startBase, player) = res.runners[res.index]
             let desired = min(startBase + res.baseCount, 3)   // 3 == home
@@ -1255,10 +1480,9 @@ struct LiveGameView: View {
             let forced = (0..<startBase).allSatisfy { res.occupied.contains($0) }
 
             if desired >= 3 && res.ahead >= 3 {
-                // A true walk-in — a single with every base behind loaded — is forced home with no
-                // choice, so trot him home to score (in tandem with the rest). Otherwise it's the
-                // runner's call, so we ask.
-                if res.baseCount == 1 && forced {
+                // Forced home (a loaded-bases walk-in, or any ghost-on runner reaching home) → trot him
+                // home to score in tandem with the rest. Otherwise it's the runner's call, so we ask.
+                if promptless || (res.baseCount == 1 && forced) {
                     travelers.append(RunningRunner(id: player.persistentModelID, player: player,
                                                    leg: startBase, stopAt: 4,
                                                    arrival: .scorePending(game.previousBatterLine)))
@@ -1284,7 +1508,8 @@ struct LiveGameView: View {
             let target = min(desired, res.ahead - 1)
             // Not forced, but a base is there for the taking (e.g. a runner on 2nd going to third on
             // a single with first base open) → it's discretionary, so ask instead of auto-advancing.
-            if !forced && target > startBase {
+            // Ghost-on skips the ask (every advance is forced).
+            if !promptless && !forced && target > startBase {
                 game.setRunner(player, onBase: startBase)   // show him on his base while we ask
                 resolution = res
                 let name = player.name, base = baseLabel(target)
@@ -1322,8 +1547,11 @@ struct LiveGameView: View {
         let (startBase, player) = res.runners[res.index]
         let isScore = prompt.targetBase >= 3
 
-        // A runner who scores gets the staged "run home": his chip rounds the bases one leg at a time,
-        // then the run counts and he fades off, before we resolve the rest of the play.
+        // A runner who scores gets the staged "run home". Queue it as a traveler and KEEP resolving,
+        // rather than trotting him home alone first: the batter and any other runners get added to the
+        // same trot, so the scorer rounds toward home in tandem with the batter reaching his base (the
+        // final `beginTravel` in `resolveHitStep` moves them all together) — matching the "take third"
+        // and forced-advance animations.
         if advanced && isScore {
             let rbiLine = game.previousBatterLine
             res.ahead = 3            // he's home; runners behind can still advance up to third
@@ -1331,9 +1559,9 @@ struct LiveGameView: View {
             resolution = res
             currentScoringPrompt = nil
             game.setRunner(nil, onBase: startBase)   // hand his base chip off to the trotting chip
-            travelers = [RunningRunner(id: player.persistentModelID, player: player,
-                                       leg: startBase, stopAt: 4, arrival: .scorePending(rbiLine))]
-            beginTravel { resolveHitStep() }
+            travelers.append(RunningRunner(id: player.persistentModelID, player: player,
+                                           leg: startBase, stopAt: 4, arrival: .scorePending(rbiLine)))
+            resolveHitStep()
             return
         }
 
@@ -1459,6 +1687,7 @@ struct LiveGameView: View {
                          battedOutType: draft.battedOutType,
                          batter: draft.batter,
                          pitcher: draft.pitcher,
+                         detail: draft.strikeoutPitch ?? "",   // names the strikeout pitch, if tracked
                          runsScored: drovein,
                          inning: draft.inning,
                          isTop: draft.isTop,
@@ -1718,6 +1947,8 @@ struct LiveGameView: View {
         }
         // With Force Pitcher Rotation on, the first rotation entry starts on the mound for each side.
         game.syncStartingPitchersToRotation()
+        // Record who started, so the game-end Quality Start award knows the starters.
+        game.markStartingPitchers()
         game.status = .inProgress
 
         // Seed the log so it always opens with a first line, then the opening half-inning.
@@ -1750,6 +1981,9 @@ struct PlayDraft {
     /// The score before the play, so `finishPlay` can tell how many runs it drove in — a home run
     /// with runners aboard scores several, and the resolver scores them across separate prompts.
     let runsBefore: Int
+    /// The pitch that ended a pitch-tracked strikeout (e.g. "Slider"), so the log can name it. nil for
+    /// everything else.
+    var strikeoutPitch: String? = nil
 }
 
 // A tapped base, wrapped so it can drive a `.sheet(item:)`.
@@ -2025,14 +2259,14 @@ private struct GameEndAlerts: ViewModifier {
         content
             .alert("End Game?", isPresented: $showEndConfirm) {
                 Button("End Game", role: .destructive) {
-                    game.status = .final   // the view switches to the Game Summary
+                    game.finalize()   // awards pitching decisions, then the view switches to the Game Summary
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
                 endConfirmMessage
             }
             .alert("Game Over", isPresented: $showGameOver) {
-                Button("End Game") { game.status = .final }
+                Button("End Game") { game.finalize() }
                 Button("Edit Line Score") { reviewingLineScore = true }
             } message: {
                 Text(gameOverMessage + "\n\nEnd the game, or edit the line score if you need to make corrections.")

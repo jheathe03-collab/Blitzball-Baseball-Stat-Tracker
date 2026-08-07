@@ -57,6 +57,14 @@ extension Game {
         return lineup[index]
     }
 
+    /// The batter due up right after the current one — the "on deck" hitter. Nil for a one-batter
+    /// lineup (where he'd just be the current batter again).
+    var onDeckBatterLine: GameStatLine? {
+        let lineup = battingLineup
+        guard lineup.count > 1 else { return nil }
+        return lineup[(currentBatterIndex + 1) % lineup.count]
+    }
+
     /// The ACTIVE pitcher is the fielding side's current pitcher.
     var activePitcher: Player? {
         get { battingIsHome ? awayPitcher : homePitcher }
@@ -91,7 +99,11 @@ extension Game {
     /// to have >=1 out this stint and enforces the 2-swap cap — unless `override` (injury) is set.
     /// Returns an error message if blocked, or nil on success.
     func changePitcher(to newPlayer: Player, override: Bool) -> String? {
-        guard settings.allTeamPitch else { activePitcher = newPlayer; return nil }
+        guard settings.allTeamPitch else {
+            activePitcher = newPlayer
+            recordPitcherEntry(isHome: !battingIsHome)   // the fielding side's new pitcher enters
+            return nil
+        }
         guard newPlayer !== activePitcher else { return nil }
         if !override {
             if activePitcherOuts < 1 {
@@ -104,6 +116,7 @@ extension Game {
         activePitcher = newPlayer
         activePitcherOuts = 0
         if !override { activePitcherSwaps += 1 }
+        recordPitcherEntry(isHome: !battingIsHome)       // the fielding side's new pitcher enters
         return nil
     }
 
@@ -151,6 +164,7 @@ extension Game {
 
         if fieldingIsHome { homePitcher = next; homePitcherOuts = 0 }
         else              { awayPitcher = next; awayPitcherOuts = 0 }
+        recordPitcherEntry(isHome: fieldingIsHome)   // the rotation's next arm enters this half-inning
     }
 
     /// Seed both starting pitchers from the rotation at kickoff (Force Pitcher Rotation only).
@@ -306,6 +320,20 @@ extension Game {
         runnerSecond = result.bases[1].flatMap(player(for:))
         runnerThird  = result.bases[2].flatMap(player(for:))
         recordResponsibilityForNewRunners()
+    }
+
+    /// A dropped third strike where the batter reaches first: a strikeout is charged to the batter and
+    /// the pitcher (an at-bat, a K), but NO out is made — the batter is safe at first, forcing any
+    /// runners ahead exactly as a walk would. `wildPitch` only colors the play-log wording (wild pitch
+    /// vs passed ball); the base mechanics are identical.
+    func recordDroppedThirdStrike(wildPitch: Bool) {
+        guard let batter = currentBatterLine, let batterPlayer = batter.player else { return }
+        batter.batting.record(.strikeout)                     // K + at-bat for the batter
+        activePitcherLine?.pitching.recordAllowed(.strikeout) // K + at-bat-against, but this also…
+        activePitcherLine?.pitching.outsRecorded -= 1         // …counted an out that never happened — undo it
+        applyAdvance(BaseRunning.advanceOnWalk(bases: runnerTokens, batter: 3),
+                     batter: batter, batterPlayer: batterPlayer)   // batter to first, force runners ahead
+        advanceBatter()                                       // no out, so no half-inning check needed
     }
 
     /// A double play: the batter is out (an at-bat, no hit, like any out) and the runner on
@@ -539,6 +567,7 @@ extension Game {
         ensureInningSlots()
         let index = currentInning - 1
         if battingIsHome { homeInningRuns[index] += 1 } else { awayInningRuns[index] += 1 }
+        checkBlownSaveOnRun()   // did that run just erase a save-able lead?
     }
 
     /// Charge a run to whoever is on the hook for THIS runner. A reliever is never charged for a

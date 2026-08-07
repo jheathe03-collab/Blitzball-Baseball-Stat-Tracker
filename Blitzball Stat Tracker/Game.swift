@@ -102,6 +102,21 @@ final class Game {
     /// JSON blob, defaulted so older games migrate as an empty log.
     var challengeCallsData: Data = Data()
 
+    /// Whether end-of-game pitching decisions (Quality Starts today; Saves/Blown Saves later) have
+    /// been awarded, so `finalize()` credits them exactly once. Defaulted so old games migrate as false.
+    var pitchingDecisionsRecorded: Bool = false
+
+    // Save/Blown-Save context (per side), captured whenever that side's pitcher enters: the lead his
+    // team held at entry (to know if he came in protecting a save-able lead) and his line's outs at
+    // entry (to measure innings THIS stint for a long save), plus whether he's already been charged a
+    // blown save this stint. All defaulted so old games migrate cleanly.
+    var homeSaveEntryLead: Int = 0
+    var awaySaveEntryLead: Int = 0
+    var homeSaveEntryOuts: Int = 0
+    var awaySaveEntryOuts: Int = 0
+    var homeBlownSaveCharged: Bool = false
+    var awayBlownSaveCharged: Bool = false
+
     /// Fielding errors charged to each team — the line score's "E" column. Defaulted so older
     /// games migrate as-is (and honestly report zero, since errors weren't tracked back then).
     var homeErrors: Int = 0

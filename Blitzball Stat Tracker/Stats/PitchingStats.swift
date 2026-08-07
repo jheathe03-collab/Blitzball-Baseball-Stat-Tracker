@@ -34,6 +34,8 @@ public struct PitchingStats: Codable, Hashable, Sendable {
     public var saves: Int
     /// Quality starts (6+ IP with 3 or fewer earned runs). A counting stat we track and total.
     public var qualityStarts: Int
+    /// Blown saves (a lead the pitcher was protecting was lost). A counting stat we track and total.
+    public var blownSaves: Int
 
     public init(
         outsRecorded: Int = 0,
@@ -46,7 +48,8 @@ public struct PitchingStats: Codable, Hashable, Sendable {
         strikeoutsLooking: Int = 0,
         atBatsAgainst: Int = 0,
         saves: Int = 0,
-        qualityStarts: Int = 0
+        qualityStarts: Int = 0,
+        blownSaves: Int = 0
     ) {
         self.outsRecorded = outsRecorded
         self.earnedRuns = earnedRuns
@@ -59,6 +62,7 @@ public struct PitchingStats: Codable, Hashable, Sendable {
         self.atBatsAgainst = atBatsAgainst
         self.saves = saves
         self.qualityStarts = qualityStarts
+        self.blownSaves = blownSaves
     }
 
     // MARK: - Derived building blocks
@@ -112,7 +116,8 @@ extension PitchingStats {
             strikeoutsLooking: lhs.strikeoutsLooking + rhs.strikeoutsLooking,
             atBatsAgainst: lhs.atBatsAgainst + rhs.atBatsAgainst,
             saves: lhs.saves + rhs.saves,
-            qualityStarts: lhs.qualityStarts + rhs.qualityStarts
+            qualityStarts: lhs.qualityStarts + rhs.qualityStarts,
+            blownSaves: lhs.blownSaves + rhs.blownSaves
         )
     }
 
@@ -131,7 +136,8 @@ extension PitchingStats {
             strikeoutsLooking: max(0, lhs.strikeoutsLooking - rhs.strikeoutsLooking),
             atBatsAgainst: max(0, lhs.atBatsAgainst - rhs.atBatsAgainst),
             saves: max(0, lhs.saves - rhs.saves),
-            qualityStarts: max(0, lhs.qualityStarts - rhs.qualityStarts)
+            qualityStarts: max(0, lhs.qualityStarts - rhs.qualityStarts),
+            blownSaves: max(0, lhs.blownSaves - rhs.blownSaves)
         )
     }
 }
@@ -144,7 +150,7 @@ extension PitchingStats {
     // — instead of the decode failing and zeroing the whole line. Encoding stays auto-synthesized.
     private enum CodingKeys: String, CodingKey {
         case outsRecorded, earnedRuns, runsAllowed, hitsAllowed, homeRunsAllowed
-        case walksAllowed, strikeouts, strikeoutsLooking, atBatsAgainst, saves, qualityStarts
+        case walksAllowed, strikeouts, strikeoutsLooking, atBatsAgainst, saves, qualityStarts, blownSaves
     }
 
     public init(from decoder: Decoder) throws {
@@ -160,5 +166,6 @@ extension PitchingStats {
         atBatsAgainst = try c.decodeIfPresent(Int.self, forKey: .atBatsAgainst) ?? 0
         saves = try c.decodeIfPresent(Int.self, forKey: .saves) ?? 0
         qualityStarts = try c.decodeIfPresent(Int.self, forKey: .qualityStarts) ?? 0
+        blownSaves = try c.decodeIfPresent(Int.self, forKey: .blownSaves) ?? 0
     }
 }

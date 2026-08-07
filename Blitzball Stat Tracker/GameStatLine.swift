@@ -25,6 +25,10 @@ final class GameStatLine {
     /// Still in the game? (Used when we add substitutions later.)
     var isActive: Bool
 
+    /// True for the pitcher who STARTED the game on this side — set once at first pitch. Only a starter
+    /// can earn a Quality Start, so the game-end award checks this. Defaulted so old lines migrate off.
+    var isStarter: Bool = false
+
     /// True for the neutral Designated Hitter's single shared line (belongs to neither team;
     /// bats in both lineups). Kept out of team totals so DH stats stay personal-only.
     var isDH: Bool = false
