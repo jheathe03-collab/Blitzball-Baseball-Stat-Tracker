@@ -97,6 +97,11 @@ final class Game {
     var homeChallengesWon: Int = 0
     var awayChallengesWon: Int = 0
 
+    /// A per-challenge log (who / when / outcome), decoded via `challengeCalls`. Separate from the
+    /// counters above, which are all the live scoring needs; this drives the "View Challenges" recap.
+    /// JSON blob, defaulted so older games migrate as an empty log.
+    var challengeCallsData: Data = Data()
+
     /// Fielding errors charged to each team — the line score's "E" column. Defaulted so older
     /// games migrate as-is (and honestly report zero, since errors weren't tracked back then).
     var homeErrors: Int = 0

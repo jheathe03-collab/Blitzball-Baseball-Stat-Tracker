@@ -149,14 +149,15 @@ struct OutcomeStatsTests {
         #expect(!charging.contains(.fieldersChoice))   // a plain FC is nobody's mistake
     }
 
-    /// The scoring pad keeps its nine buttons; the variants live behind the menu.
+    /// The scoring pad keeps its nine buttons; the error/fielder's-choice variants are the other
+    /// nine; and the sacrifice fly is reached from the contact sheet. Together they're every outcome.
     @Test func padAndMenuTogetherCoverEveryOutcome() throws {
         let pad = PlateAppearanceOutcome.primaryCases
         let menu = PlateAppearanceOutcome.reachedOnCases
         #expect(pad.count == 9)
         #expect(menu.count == 9)
         #expect(Set(pad).isDisjoint(with: Set(menu)))
-        #expect(Set(pad).union(menu) == Set(PlateAppearanceOutcome.allCases))
+        #expect(Set(pad).union(menu).union([.sacrificeFly]) == Set(PlateAppearanceOutcome.allCases))
     }
 
     /// Every outcome has a button label, a full name, and a readable verb phrase.

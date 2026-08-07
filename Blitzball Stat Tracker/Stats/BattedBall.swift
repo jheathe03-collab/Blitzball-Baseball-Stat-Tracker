@@ -40,6 +40,77 @@ public enum BattedBallType: String, CaseIterable, Codable, Sendable {
     public static var menuOrder: [BattedBallType] {
         [.groundBall, .lineDrive, .flyBall, .popFly, .bunt]
     }
+
+    /// The specific out kinds offered for this contact type when the play is an out. A ground ball
+    /// has a single option, so its choice is auto-selected (no extra tap).
+    public var outTypeOptions: [BattedOutType] {
+        switch self {
+        case .groundBall: return [.groundOut]
+        case .lineDrive:  return [.lineOut, .lineOutFoul]
+        case .flyBall:    return [.flyOut, .flyOutFoul]
+        case .popFly:     return [.popOut, .popOutFoul]
+        case .bunt:       return [.buntOutAtFirst, .popOut, .popOutFoul]
+        }
+    }
+}
+
+/// The specific kind of in-play out — chosen after a batted out's contact type and fielder. Enriches
+/// the play log ("Fly Out", "Line Out (Foul)", "Out at 1st") beyond a bare "Out". Stored on
+/// `PlayEvent` as a raw String, the same forward-compatible pattern as the rest of the batted-ball
+/// data. (`Codable`/`Sendable` so it rides along in snapshots and across tasks.)
+public enum BattedOutType: String, CaseIterable, Codable, Sendable {
+    case groundOut
+    case lineOut
+    case lineOutFoul
+    case flyOut
+    case flyOutFoul
+    case popOut
+    case popOutFoul
+    case buntOutAtFirst
+    /// A ground ball where the batter is out at first and the other runners advance a base (a runner
+    /// coming home is resolved Safe/Out). Offered on a ground ball when a runner is on; distinct from
+    /// a plain ground out, where the runners hold.
+    case outAtFirst
+    /// Two outs on one batted ball — the batter and a runner. Offered on any contact type when a
+    /// runner is on and there's room for two outs; not tied to a single contact type.
+    case doublePlay
+    /// Three outs on one batted ball — the batter and two runners. Offered only with 0 outs and runners
+    /// on first and second (or bases loaded), where the forced runners can all be retired.
+    case triplePlay
+
+    /// The play-log headline ("Ground Out", "Fly Out (Foul)", "Out at 1st", "Double Play").
+    public var label: String {
+        switch self {
+        case .groundOut:      return "Ground Out"
+        case .lineOut:        return "Line Out"
+        case .lineOutFoul:    return "Line Out (Foul)"
+        case .flyOut:         return "Fly Out"
+        case .flyOutFoul:     return "Fly Out (Foul)"
+        case .popOut:         return "Pop Out"
+        case .popOutFoul:     return "Pop Out (Foul)"
+        case .buntOutAtFirst: return "Out at 1st"
+        case .outAtFirst:     return "Out at 1st"
+        case .doublePlay:     return "Double Play"
+        case .triplePlay:     return "Triple Play"
+        }
+    }
+
+    /// Verb phrase for the prose line — reads as "\(batter) \(verb) to \(fielder)".
+    public var verb: String {
+        switch self {
+        case .groundOut:      return "grounds out"
+        case .lineOut:        return "lines out"
+        case .lineOutFoul:    return "lines out foul"
+        case .flyOut:         return "flies out"
+        case .flyOutFoul:     return "flies out foul"
+        case .popOut:         return "pops out"
+        case .popOutFoul:     return "pops out foul"
+        case .buntOutAtFirst: return "bunts out"
+        case .outAtFirst:     return "grounds out"
+        case .doublePlay:     return "hits into a double play"
+        case .triplePlay:     return "hits into a triple play"
+        }
+    }
 }
 
 /// A defensive position — where a batted ball went, or where an out was recorded. For now these are

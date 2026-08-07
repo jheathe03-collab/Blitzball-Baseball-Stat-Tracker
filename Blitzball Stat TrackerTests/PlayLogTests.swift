@@ -103,6 +103,45 @@ struct PlayLogTests {
         #expect(play.summary == "Sam is out. Fly ball to left field. Darrin pitching.")
     }
 
+    /// A tagged in-play out shows its specific kind as the headline and reads as one phrase.
+    @Test func inPlayOutShowsItsSpecificKind() throws {
+        let f = makeGame()
+        f.game.logPlay(.plateAppearance, outcome: .out,
+                       battedBallType: .flyBall, fieldPosition: .leftField, battedOutType: .flyOut,
+                       batter: f.batter, pitcher: f.pitcher)
+        let play = try #require(f.game.orderedPlays.last)
+        #expect(play.title == "Fly Out")
+        #expect(play.summary == "Sam flies out to left field. Darrin pitching.")
+        #expect(play.battedOutType == .flyOut)
+    }
+
+    /// Foul and bunt outs read naturally, with their own headlines.
+    @Test func foulAndBuntOutsReadNaturally() throws {
+        let f = makeGame()
+        f.game.logPlay(.plateAppearance, outcome: .out,
+                       battedBallType: .lineDrive, fieldPosition: .thirdBase, battedOutType: .lineOutFoul,
+                       batter: f.batter, pitcher: f.pitcher)
+        f.game.logPlay(.plateAppearance, outcome: .out,
+                       battedBallType: .bunt, fieldPosition: .pitcher, battedOutType: .buntOutAtFirst,
+                       batter: f.batter, pitcher: f.pitcher)
+        let plays = f.game.orderedPlays
+        #expect(plays[plays.count - 2].title == "Line Out (Foul)")
+        #expect(plays[plays.count - 2].summary == "Sam lines out foul to third base. Darrin pitching.")
+        #expect(plays[plays.count - 1].title == "Out at 1st")
+        #expect(plays[plays.count - 1].summary == "Sam bunts out to pitcher. Darrin pitching.")
+    }
+
+    /// A double play headlines as "Double Play" and reads as one phrase.
+    @Test func doublePlayReadsAndHeadlines() throws {
+        let f = makeGame()
+        f.game.logPlay(.plateAppearance, outcome: .out,
+                       battedBallType: .groundBall, fieldPosition: .shortstop, battedOutType: .doublePlay,
+                       batter: f.batter, pitcher: f.pitcher)
+        let play = try #require(f.game.orderedPlays.last)
+        #expect(play.title == "Double Play")
+        #expect(play.summary == "Sam hits into a double play to shortstop. Darrin pitching.")
+    }
+
     /// Errors and fielder's choices carry the fielder (not a contact type), and read it inline —
     /// "reaches on an error by the shortstop" — using the fielder's name, not the base's.
     @Test func reachedOnMisplayNamesTheFielderInProse() throws {

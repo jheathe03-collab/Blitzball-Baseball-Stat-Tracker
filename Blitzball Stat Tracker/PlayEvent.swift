@@ -25,6 +25,8 @@ enum PlayEventKind: String, Codable, CaseIterable {
     case manualRun
     case lineScoreEdit
     case steal
+    case caughtStealing
+    case baserunning   // other advances/outs on the bases (errors, indifference, pickoff, appeal…)
 }
 
 @Model
@@ -55,6 +57,10 @@ final class PlayEvent {
     var battedBallTypeRaw: String?
     var fieldPositionRaw: String?
 
+    /// `BattedOutType.rawValue` for an in-play out (grounder, fly, line, pop, bunt); nil otherwise.
+    /// Drives the out's headline and prose. Raw + optional, same forward-compat reasoning as above.
+    var battedOutTypeRaw: String?
+
     /// Who was involved. Unidirectional to-one refs, the same pattern as `Game.runnerFirst`.
     var batter: Player?
     var pitcher: Player?
@@ -83,6 +89,7 @@ final class PlayEvent {
         outcome: PlateAppearanceOutcome? = nil,
         battedBallType: BattedBallType? = nil,
         fieldPosition: FieldPosition? = nil,
+        battedOutType: BattedOutType? = nil,
         batter: Player? = nil,
         pitcher: Player? = nil,
         detail: String = "",
@@ -100,6 +107,7 @@ final class PlayEvent {
         self.outcomeRaw = outcome?.rawValue
         self.battedBallTypeRaw = battedBallType?.rawValue
         self.fieldPositionRaw = fieldPosition?.rawValue
+        self.battedOutTypeRaw = battedOutType?.rawValue
         self.batter = batter
         self.pitcher = pitcher
         self.detail = detail
@@ -133,6 +141,11 @@ extension PlayEvent {
         set { fieldPositionRaw = newValue?.rawValue }
     }
 
+    var battedOutType: BattedOutType? {
+        get { battedOutTypeRaw.flatMap(BattedOutType.init(rawValue:)) }
+        set { battedOutTypeRaw = newValue?.rawValue }
+    }
+
     /// "Top 3" / "Bot 5" — matches `Game.halfInningLabel`.
     var halfInningLabel: String {
         "\(isTopInning ? "Top" : "Bot") \(inning)"
@@ -143,7 +156,11 @@ extension PlayEvent {
 
     /// The headline shown in the log — the outcome's name, or the event's own label.
     var title: String {
-        if let outcome { return outcome.playLabel }
+        if let outcome {
+            // A tagged in-play out shows its specific kind ("Fly Out", "Out at 1st") over a bare "Out".
+            if outcome == .out, let out = battedOutType { return out.label }
+            return outcome.playLabel
+        }
         switch kind {
         case .gameStart:      return "Game Start"
         case .inningChange:   return halfInningLabel
@@ -152,6 +169,8 @@ extension PlayEvent {
         case .manualRun:      return "Run Scored"
         case .lineScoreEdit:  return "Score Adjusted"
         case .steal:          return "Stolen Base"
+        case .caughtStealing: return "Caught Stealing"
+        case .baserunning:    return "Baserunning"
         case .plateAppearance: return "Plate Appearance"
         }
     }
@@ -164,6 +183,15 @@ extension PlayEvent {
     var summary: String {
         guard let outcome, kind == .plateAppearance else { return detail }
         let who = batter?.name ?? "Batter"
+        // A tagged in-play out reads as one phrase ("flies out to left field") — the out kind and the
+        // fielder together, replacing the bare "is out" + separate contact-ball sentence.
+        if outcome == .out, let out = battedOutType {
+            var s = "\(who) \(out.verb)"
+            if let position = fieldPosition { s += " to \(position.fullName)" }
+            var parts = [s]
+            if let arm = pitcher?.name { parts.append("\(arm) pitching") }
+            return parts.joined(separator: ". ") + "."
+        }
         var first = "\(who) \(outcome.pastTenseDescription)"
         // Error / fielder's-choice plays carry a fielder but no contact type — name them inline:
         // "reaches on an error by the shortstop".

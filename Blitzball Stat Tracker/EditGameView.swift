@@ -92,6 +92,7 @@ struct EditPlayerStatsView: View {
                 editStepper("Strikeouts Looking", $line.batting.strikeoutsLooking)
                 editStepper("Sacrifice Flies", $line.batting.sacrificeFlies)
                 editStepper("Stolen Bases", $line.batting.stolenBases)
+                editStepper("Caught Stealing", $line.batting.caughtStealing)
             }
             Section("Pitching") {
                 editStepper("Outs Recorded", $line.pitching.outsRecorded)

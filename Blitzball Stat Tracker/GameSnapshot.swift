@@ -26,6 +26,8 @@ struct GameSnapshot {
     var awayChallengesUsed: Int
     var homeChallengesWon: Int
     var awayChallengesWon: Int
+    /// The per-challenge log, so undoing a challenge drops its recap entry too.
+    var challengeCalls: [ChallengeCall]
     /// Fielding errors, so undoing a play that charged one takes it back off the board.
     var homeErrors: Int
     var awayErrors: Int
@@ -57,6 +59,7 @@ struct GameSnapshot {
         var outcome: PlateAppearanceOutcome?
         var battedBallType: BattedBallType?
         var fieldPosition: FieldPosition?
+        var battedOutType: BattedOutType?
         var batter: Player?
         var pitcher: Player?
         var detail: String
@@ -75,6 +78,7 @@ struct GameSnapshot {
             outcome = play.outcome
             battedBallType = play.battedBallType
             fieldPosition = play.fieldPosition
+            battedOutType = play.battedOutType
             batter = play.batter
             pitcher = play.pitcher
             detail = play.detail
@@ -89,6 +93,7 @@ struct GameSnapshot {
             let event = PlayEvent(game: game, sequence: sequence, kind: kind, inning: inning,
                                   isTopInning: isTopInning, outsBefore: outsBefore, outcome: outcome,
                                   battedBallType: battedBallType, fieldPosition: fieldPosition,
+                                  battedOutType: battedOutType,
                                   batter: batter, pitcher: pitcher, detail: detail,
                                   runsScored: runsScored, homeScore: homeScore, awayScore: awayScore,
                                   createdAt: createdAt)
@@ -121,6 +126,7 @@ extension Game {
             awayChallengesUsed: awayChallengesUsed,
             homeChallengesWon: homeChallengesWon,
             awayChallengesWon: awayChallengesWon,
+            challengeCalls: challengeCalls,
             homeErrors: homeErrors,
             awayErrors: awayErrors,
             runnerFirst: runnerFirst,
@@ -168,6 +174,7 @@ extension Game {
         awayChallengesUsed = snapshot.awayChallengesUsed
         homeChallengesWon = snapshot.homeChallengesWon
         awayChallengesWon = snapshot.awayChallengesWon
+        challengeCalls = snapshot.challengeCalls
         homeErrors = snapshot.homeErrors
         awayErrors = snapshot.awayErrors
         runnerFirst = snapshot.runnerFirst

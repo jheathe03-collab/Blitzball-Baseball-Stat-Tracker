@@ -45,6 +45,17 @@ struct ExhibitionView: View {
     }
 }
 
+extension Game {
+    /// The most recent exhibition game left in progress — what Exhibition's "Resume In Progress Game"
+    /// button reopens. Only exhibition games qualify: season/tournament games resume from their own
+    /// hubs, and reopening one here would bypass that flow. The newest wins if several piled up.
+    static func resumableExhibition(in games: [Game]) -> Game? {
+        games
+            .filter { $0.status == .inProgress && $0.mode == .exhibition }
+            .max { $0.createdAt < $1.createdAt }
+    }
+}
+
 // MARK: - Which slot we're filling
 
 enum TeamRole: String, Identifiable {
@@ -66,9 +77,25 @@ struct SelectTeamsView: View {
     @State private var showStartConfirm = false
     @State private var startGame = false
     @State private var showPitcherWarning = false
+    // Set to an orphaned in-progress exhibition game when the user taps Resume.
+    @State private var resumeGame: Game?
 
     private var bothTeamsChosen: Bool {
         game.homeTeam != nil && game.awayTeam != nil
+    }
+
+    /// An exhibition game that was started but never finished — left behind when the app was closed
+    /// mid-game. `loadOrCreateGame` only ever reuses a `.setup` draft, so without this it's orphaned
+    /// with no way back in.
+    private var resumableGame: Game? {
+        Game.resumableExhibition(in: allGames)
+    }
+
+    /// "Away at Home · Top 3" — the matchup and where the resumable game left off.
+    private func resumeSubtitle(_ g: Game) -> String {
+        let away = g.awayTeam?.name ?? "Away"
+        let home = g.homeTeam?.name ?? "Home"
+        return "\(away) at \(home) · \(g.halfInningLabel)"
     }
 
     private var pitcherWarningMessage: String {
@@ -207,6 +234,29 @@ struct SelectTeamsView: View {
                         .foregroundStyle(.white.opacity(0.7))
                 }
             }
+
+            // Jump back into a game that was started but never finished (e.g. the app closed
+            // mid-game). Only shown when such a game exists.
+            if let resumable = resumableGame {
+                Section {
+                    Button {
+                        resumeGame = resumable
+                    } label: {
+                        VStack(spacing: 4) {
+                            Label("Resume In Progress Game", systemImage: "play.circle.fill")
+                                .fontWeight(.semibold)
+                            Text(resumeSubtitle(resumable))
+                                .font(.caption)
+                                .foregroundStyle(.orange.opacity(0.85))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .foregroundStyle(.orange)
+                    }
+                } footer: {
+                    Text("Continue an existing game.")
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
         }
         .navigationTitle("Select Teams")
         .blitzballBackground()
@@ -224,6 +274,9 @@ struct SelectTeamsView: View {
             DesignatedHitterPicker(game: game)
         }
         .navigationDestination(isPresented: $startGame) {
+            LiveGameView(game: game)
+        }
+        .navigationDestination(item: $resumeGame) { game in
             LiveGameView(game: game)
         }
         .alert("Settings look good?", isPresented: $showStartConfirm) {

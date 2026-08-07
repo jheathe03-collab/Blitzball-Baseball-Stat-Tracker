@@ -187,7 +187,7 @@ struct BattingBox: View {
     let lines: [GameStatLine]
     var showTotals: Bool = true
 
-    private let headers = ["AB", "R", "H", "RBI", "BB", "K", "SB", "AVG", "OPS"]
+    private let headers = ["AB", "R", "H", "RBI", "BB", "K", "SB", "CS", "AVG", "OPS"]
 
     var body: some View {
         // Decode each line's batting blob ONCE per render, then use the cached values for BOTH
@@ -227,6 +227,7 @@ struct BattingBox: View {
             Text("\(b.walks)")
             Text("\(b.strikeouts)")
             Text("\(b.stolenBases)")
+            Text("\(b.caughtStealing)")
             Text(StatFormat.rate(b.battingAverage))
             Text(StatFormat.rate(b.onBasePlusSlugging))
         }

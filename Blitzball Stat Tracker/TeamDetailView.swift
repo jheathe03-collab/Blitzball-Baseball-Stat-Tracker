@@ -156,7 +156,9 @@ struct TeamDetailView: View {
                         GameHistoryRow(game: game)
                     }
                     .swipeActions(edge: .trailing) {
-                        if game.season == nil {
+                        // Only finished games can be deleted — never an in-progress one (it may be
+                        // the game being played live right now, which would crash the live screen).
+                        if game.season == nil && game.status == .final {
                             Button(role: .destructive) { gameToDelete = game } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -166,7 +168,7 @@ struct TeamDetailView: View {
             } header: {
                 Text("Game History").foregroundStyle(.white)
             } footer: {
-                Text("Tap a game to see its summary. Swipe an exhibition or tournament game to delete it.")
+                Text("Tap a game to see its summary. Swipe a finished exhibition or tournament game to delete it.")
                     .foregroundStyle(.white.opacity(0.6))
             }
             .blitzCardRow()

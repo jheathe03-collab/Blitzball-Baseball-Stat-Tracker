@@ -15,7 +15,7 @@ enum StatsCSV {
     // MARK: - Column headers (shared by season + all-teams)
 
     private static let battingHeaders =
-        ["PA", "AB", "R", "H", "1B", "2B", "3B", "HR", "RBI", "BB", "HBP", "SO", "Kl", "SF", "SB",
+        ["PA", "AB", "R", "H", "1B", "2B", "3B", "HR", "RBI", "BB", "HBP", "SO", "Kl", "SF", "SB", "CS",
          "AVG", "OBP", "SLG", "OPS"]
 
     private static let pitchingHeaders =
@@ -261,6 +261,7 @@ enum StatsCSV {
         ["\(b.plateAppearances)", "\(b.atBats)", "\(b.runsScored)", "\(b.hits)", "\(b.singles)",
          "\(b.doubles)", "\(b.triples)", "\(b.homeRuns)", "\(b.rbi)", "\(b.walks)", "\(b.hitByPitch)",
          "\(b.strikeouts)", "\(b.strikeoutsLooking)", "\(b.sacrificeFlies)", "\(b.stolenBases)",
+         "\(b.caughtStealing)",
          rate(b.battingAverage), rate(b.onBasePercentage), rate(b.sluggingPercentage),
          rate(b.onBasePlusSlugging)]
     }

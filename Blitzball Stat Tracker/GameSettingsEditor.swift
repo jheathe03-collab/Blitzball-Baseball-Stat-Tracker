@@ -5,11 +5,24 @@
 //  Reusable editor for a GameSettings rulebook — used by Game Options (a Game's settings) and
 //  Season Settings (a Season's settings). Just the Form; the caller sets the navigation title.
 //
+//  The bound `settings` is a JSON-blob-backed computed property (see Game.settings): every read
+//  decodes it and every write re-encodes it AND writes a SwiftData property, which invalidates the
+//  whole screen (and the pregame screen underneath). Doing that on every toggle made the controls
+//  feel laggy. So we edit a LOCAL copy — instant, no decode/encode churn — and commit back to the
+//  bound blob exactly once, when the screen goes away (or the app backgrounds mid-edit).
+//
 
 import SwiftUI
 
 struct GameSettingsEditor: View {
     @Binding var settings: GameSettings
+    @State private var draft: GameSettings
+    @Environment(\.scenePhase) private var scenePhase
+
+    init(settings: Binding<GameSettings>) {
+        _settings = settings
+        _draft = State(initialValue: settings.wrappedValue)
+    }
 
     var body: some View {
         Form {
@@ -27,47 +40,58 @@ struct GameSettingsEditor: View {
             .blitzCardRow()
 
             Section(header: Text("Rules").foregroundStyle(.white)) {
-                Stepper("Innings: \(settings.innings)",
-                        value: $settings.innings, in: GameSettings.inningsRange)
-                Stepper("Outs Per Inning: \(settings.outsPerInning)",
-                        value: $settings.outsPerInning, in: GameSettings.outsRange)
+                Stepper("Innings: \(draft.innings)",
+                        value: $draft.innings, in: GameSettings.inningsRange)
+                Stepper("Outs Per Inning: \(draft.outsPerInning)",
+                        value: $draft.outsPerInning, in: GameSettings.outsRange)
 
-                Toggle("Extra Innings", isOn: $settings.extraInnings)
-                Toggle("Substitutions", isOn: $settings.substitutions)
-                Toggle("All Team Pitch", isOn: $settings.allTeamPitch)
-                Toggle("Force Pitcher Rotation", isOn: $settings.forcePitcherRotation)
+                Toggle("Extra Innings", isOn: $draft.extraInnings)
+                Toggle("Substitutions", isOn: $draft.substitutions)
+                Toggle("All Team Pitch", isOn: $draft.allTeamPitch)
+                Toggle("Force Pitcher Rotation", isOn: $draft.forcePitcherRotation)
 
-                Stepper("Max Strikes: \(settings.maxStrikes)",
-                        value: $settings.maxStrikes, in: GameSettings.strikesRange)
-                Stepper("Max Balls: \(settings.maxBalls)",
-                        value: $settings.maxBalls, in: GameSettings.ballsRange)
+                Stepper("Max Strikes: \(draft.maxStrikes)",
+                        value: $draft.maxStrikes, in: GameSettings.strikesRange)
+                Stepper("Max Balls: \(draft.maxBalls)",
+                        value: $draft.maxBalls, in: GameSettings.ballsRange)
 
-                Toggle("Ghost Runners", isOn: $settings.ghostRunners)
-                Toggle("HBP Walks", isOn: $settings.hbpWalks)
-                Toggle("Designated Hitter", isOn: $settings.designatedHitter)
+                Toggle("Ghost Runners", isOn: $draft.ghostRunners)
+                Toggle("HBP Walks", isOn: $draft.hbpWalks)
+                Toggle("Designated Hitter", isOn: $draft.designatedHitter)
 
-                Stepper("Challenges: \(settings.challenges)",
-                        value: $settings.challenges, in: GameSettings.challengesRange)
+                Stepper("Challenges: \(draft.challenges)",
+                        value: $draft.challenges, in: GameSettings.challengesRange)
             }
             .blitzCardRow()
 
             Section {
-                Button("Reset to Blitzball Defaults") { settings = .blitzballDefaults }
-                Button("Reset to Baseball Defaults") { settings = .baseballDefaults }
+                Button("Reset to Blitzball Defaults") { draft = .blitzballDefaults }
+                Button("Reset to Baseball Defaults") { draft = .baseballDefaults }
             }
             .blitzCardRow()
         }
+        // Persist the edits once, on the way out (or if the app backgrounds mid-edit).
+        .onDisappear { commit() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { commit() }
+        }
+    }
+
+    /// Write the local draft back to the bound blob — but only if something actually changed, so we
+    /// don't trigger a needless SwiftData write (and screen invalidation) when nothing was edited.
+    private func commit() {
+        if draft != settings { settings = draft }
     }
 
     /// Reads the DERIVED type (shows "Custom" once anything is tweaked); selecting a preset swaps
     /// the whole struct; selecting "Custom" is a no-op (it's a status, not a preset).
     private var gameTypeBinding: Binding<GameType> {
         Binding(
-            get: { settings.matchedType },
+            get: { draft.matchedType },
             set: { newType in
                 switch newType {
-                case .blitzball: settings = .blitzballDefaults
-                case .baseball:  settings = .baseballDefaults
+                case .blitzball: draft = .blitzballDefaults
+                case .baseball:  draft = .baseballDefaults
                 case .custom:    break
                 }
             }

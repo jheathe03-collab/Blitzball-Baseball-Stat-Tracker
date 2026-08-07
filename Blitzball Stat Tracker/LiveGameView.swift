@@ -16,13 +16,13 @@ struct LiveGameView: View {
     var onExit: (() -> Void)? = nil
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    // Lets "Finish Game Later" pop all the way back to the main menu (exhibition/season).
+    @Environment(Router.self) private var router
 
     @State private var showSplash = true
     @State private var showEndConfirm = false
     @State private var showBatterPicker = false
-    @State private var showStealPicker = false
     @State private var showPitcherPicker = false
-    @State private var showSubstitution = false
     @State private var editingBase: BaseSelection?
 
     // In-memory Undo history: a snapshot is pushed before each play, capped to the last 100.
@@ -41,6 +41,9 @@ struct LiveGameView: View {
     // prompt currently on screen (nil when none).
     @State private var resolution: HitResolution?
     @State private var currentScoringPrompt: ScoringPrompt?
+    /// Runners currently trotting the bases (a scoring runner, the batter reaching base, everyone on a
+    /// home run). Stepped one leg at a time so they round the bases; see `driveTravelers`.
+    @State private var travelers: [RunningRunner] = []
     // Inherited-runner charges from the play just resolved, awaiting confirmation.
     @State private var inheritedCharges: [InheritedCharge] = []
     // The plate appearance being resolved, captured before it's applied and logged in finishPlay.
@@ -56,6 +59,8 @@ struct LiveGameView: View {
     // Pushed from the game menu (previously stacked buttons under the pad).
     @State private var showEditStats = false
     @State private var showSummary = false
+    @State private var showGameOptions = false
+    @State private var showChallenges = false
     // Challenge flow (opt-in via settings.challenges): step 1 asks whose challenge; picking a team
     // stashes it here so step 2 can ask the result (successful/failed).
     @State private var showChallengeTeamPicker = false
@@ -65,10 +70,33 @@ struct LiveGameView: View {
     // Contact type chosen; now waiting for the user to tap WHERE on the live field. While set, the
     // field shows the position pucks and the pad is replaced by a prompt + Cancel.
     @State private var locationCapture: LocationCapture?
-    // A fielder's choice mid-resolution: the fielder is chosen, now asking which runner was played
-    // on (only when more than one) and then whether they were safe or out.
+    // A batted OUT whose fielder is chosen, now asking the specific out kind (fly out, line out foul…).
+    @State private var pendingOutType: PendingOutType?
+    // A fielder's choice mid-resolution: the fielder is chosen; on-field Safe/Out buttons on each
+    // runner then resolve which runner was played on and whether they were safe or out in one tap.
     @State private var fcCapture: FieldersChoiceCapture?
-    @State private var fcPlayedOnBase: Int?
+    // A runner was dragged to a base and is being resolved: on-field Safe/Out, then a reason menu.
+    // `stealIsSafe` is nil until Safe/Out is tapped (drives which reason menu shows).
+    @State private var pendingSteal: PendingSteal?
+    @State private var stealIsSafe: Bool?
+    // A forced double play (2+ runners) mid-resolution: after the trot, the lead runner holds at his new
+    // base for a Safe/Out call (`forcedDPAwaitingCall`). If he's safe with two runners behind him (bases
+    // loaded), the lead scores and a second stage (`forcedDPPickingOut`) asks which of the two trailing
+    // runners is the second out.
+    @State private var pendingForcedDP: ForcedDoublePlay?
+    @State private var forcedDPAwaitingCall = false
+    @State private var forcedDPPickingOut = false
+    // An "out at first" ground ball mid-resolution: the batter is out at first and the runners advance
+    // a base; if one is coming home from third, he holds at the plate for a Safe/Out call
+    // (`outAtFirstAwaitingCall`).
+    @State private var pendingOutAtFirst: OutAtFirstPlay?
+    @State private var outAtFirstAwaitingCall = false
+    // A triple play is mid-animation: the batter and two forced runners trot up a base and fade. Fully
+    // deterministic (three outs, no runs, no prompts) — this flag just drives the banner and hides the
+    // batter while it plays out.
+    @State private var animatingTriplePlay = false
+    // A staged animation (double-play run-then-out) is playing — the pad is blocked until it finishes.
+    @State private var animatingPlay = false
 
     var body: some View {
         // Once the game is over, this same screen becomes the box score.
@@ -166,9 +194,9 @@ struct LiveGameView: View {
         HStack(alignment: .center, spacing: 6) {
             teamNameCell(isHome: false)
             TeamLogoView(team: game.awayTeam, size: 34)
-            scoreCell(game.awayScore) { showBatterPicker = true }
+            scoreCell(game.awayScore) { editTeam(isHome: false) }
             Rectangle().fill(.black.opacity(0.28)).frame(width: 1, height: 40)
-            scoreCell(game.homeScore) { showPitcherPicker = true }
+            scoreCell(game.homeScore) { editTeam(isHome: true) }
             TeamLogoView(team: game.homeTeam, size: 34)
             teamNameCell(isHome: true)
         }
@@ -180,6 +208,17 @@ struct LiveGameView: View {
             editLink(edit)
         }
         .foregroundStyle(.black)
+    }
+
+    /// The Edit link under a team's score opens the picker for that team's CURRENT role: the team at
+    /// bat edits its batter, the team in the field edits its pitcher. Roles swap every half-inning, so
+    /// this is keyed off who's batting rather than home/away.
+    private func editTeam(isHome: Bool) {
+        if game.battingIsHome == isHome {
+            showBatterPicker = true
+        } else {
+            showPitcherPicker = true
+        }
     }
 
     private func editLink(_ action: @escaping () -> Void) -> some View {
@@ -223,14 +262,25 @@ struct LiveGameView: View {
                 let capturedType = capture.type
                 let outcome = capture.outcome
                 locationCapture = nil
-                recordOutcome(outcome, battedBallType: capturedType, fieldPosition: position)
+                completeLocationCapture(outcome: outcome, type: capturedType, position: position)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
         } else {
-            BaseballField(game: game) { index in
-                editingBase = BaseSelection(index: index)
-            }
+            BaseballField(
+                game: game,
+                onTapBase: { index in editingBase = BaseSelection(index: index) },
+                onDragRunner: { fromBase, toBase in
+                    pendingSteal = PendingSteal(fromBase: fromBase, toBase: toBase)
+                    stealIsSafe = nil
+                },
+                resolvingBases: resolvingBases,
+                onResolve: resolveRunner,
+                travelers: travelers.map {
+                    BaseballField.Traveler(id: $0.id, player: $0.player, leg: $0.leg)
+                },
+                hideBatter: pendingForcedDP != nil || pendingOutAtFirst != nil || animatingTriplePlay
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
         }
@@ -242,9 +292,57 @@ struct LiveGameView: View {
     private var controlArea: some View {
         if let capture = locationCapture {
             locationPromptBar(capture)
+        } else if isResolvingRunners {
+            resolutionPromptBar
+        } else if animatingPlay {
+            animatingBanner
         } else {
             scoringControls
         }
+    }
+
+    /// A non-interactive banner shown while a staged play animates, so the pad can't be tapped.
+    private var animatingBanner: some View {
+        Text(animatingTriplePlay ? "Triple play…" : (pendingOutAtFirst != nil ? "Out at first…" : "Double play…"))
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 20)
+            .background(Color(white: 0.06))
+    }
+
+    /// Shown in place of the pad while Safe/Out buttons are up on the field. A prompt + Cancel that
+    /// aborts the whole play (records nothing).
+    private var resolutionPromptBar: some View {
+        VStack(spacing: 10) {
+            Text(resolutionPrompt)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+            Button {
+                cancelResolution()
+            } label: {
+                Text("Cancel").font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 24).padding(.vertical, 10)
+                    .background(Color(white: 0.24), in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12).padding(.top, 16).padding(.bottom, 12)
+        .frame(maxWidth: .infinity)
+        .background(Color(white: 0.06))
+    }
+
+    private var resolutionPrompt: String {
+        if outAtFirstAwaitingCall { return "Play at the plate — Safe or Out?" }
+        if forcedDPPickingOut { return "Run scores — now Safe or Out on the runners at second and third." }
+        if let callBase = forcedDPCallBase {
+            return callBase >= 3 ? "Play at the plate — Safe or Out?" : "Play at third — Safe or Out?"
+        }
+        if fcCapture != nil { return "Tap Safe or Out on the runner the play was made on." }
+        return "Safe or out? Tap on the runner."
     }
 
     private var scoringControls: some View {
@@ -255,8 +353,6 @@ struct LiveGameView: View {
                 Spacer()
             }
             HStack(spacing: 10) {
-                actionPill("Steal", tint: .yellow, textColor: .black,
-                           enabled: !runnersOnBase.isEmpty) { showStealPicker = true }
                 Spacer()
                 actionPill("Run", tint: .green, textColor: .black,
                            enabled: !runnersOnBase.isEmpty) { startScoringRun() }
@@ -440,6 +536,8 @@ struct LiveGameView: View {
         .toolbar(liveTab == .scoring ? .hidden : .visible, for: .navigationBar)
         .navigationDestination(isPresented: $showEditStats) { EditGameView(game: game) }
         .navigationDestination(isPresented: $showSummary) { GameSummaryView(game: game) }
+        .sheet(isPresented: $showGameOptions) { CurrentGameOptionsView(settings: game.settings) }
+        .sheet(isPresented: $showChallenges) { ChallengesView(game: game) }
         .onAppear(perform: startIfNeeded)
         .task {
             try? await Task.sleep(for: .seconds(1.2))
@@ -449,15 +547,12 @@ struct LiveGameView: View {
             game: game,
             showBatterPicker: $showBatterPicker,
             showPitcherPicker: $showPitcherPicker,
-            showSubstitution: $showSubstitution,
-            showStealPicker: $showStealPicker,
             pitcherChangeAlert: pitcherChangeAlert,
             pitcherChangeError: pitcherChangeError,
             onPitcherChosen: attemptPitcherChange,
             onOverridePitcher: {
                 if let player = pendingPitcher { _ = game.changePitcher(to: player, override: true) }
-            },
-            onSteal: recordSteal
+            }
         ))
         .sheet(item: $battedCapture) { capture in
             ContactTypeSheet(sourceOutcome: capture.outcome,
@@ -520,19 +615,35 @@ struct LiveGameView: View {
             teamIsHome: $challengeTeamIsHome,
             onRecord: recordChallenge
         ))
-        // Fielder's choice: which runner was played on (when several), then safe or out.
-        .modifier(FieldersChoiceDialogs(
-            capture: fcCapture,
-            playedOnBase: $fcPlayedOnBase,
-            baseName: baseName,
-            onChoose: { fcPlayedOnBase = $0 },
-            onResolve: { out in
-                if let capture = fcCapture {
-                    resolveFieldersChoice(outcome: capture.outcome, fieldPosition: capture.position,
-                                          playedOnBase: fcResolvedRunner?.base, out: out)
+        // Steal reason menu — shown after the on-field Safe/Out call (the Safe/Out itself is on the
+        // field now, not a dialog).
+        .modifier(StealReasonDialog(
+            steal: pendingSteal,
+            isSafe: stealIsSafe,
+            baseLabel: stealBaseLabel,
+            onSafeReason: resolveStealSafe,
+            onOutReason: resolveStealOut,
+            onCancel: { pendingSteal = nil; stealIsSafe = nil }
+        ))
+        // The specific out kind (fly out, line out foul…), after the fielder is chosen.
+        .modifier(OutTypeDialog(
+            pending: pendingOutType,
+            onChoose: { out in
+                guard let p = pendingOutType else { return }
+                pendingOutType = nil
+                if out == .doublePlay {
+                    startDoublePlay(type: p.type, position: p.position)
+                } else if out == .triplePlay {
+                    startTriplePlay(type: p.type, position: p.position)
+                } else if out == .outAtFirst || out == .buntOutAtFirst {
+                    // A ground out at first and a bunt out at first both advance the runners a base (the
+                    // sac bunt), resolving any runner coming home Safe/Out.
+                    startOutAtFirst(type: p.type, position: p.position, outType: out)
+                } else {
+                    recordOutcome(.out, battedBallType: p.type, fieldPosition: p.position, battedOutType: out)
                 }
             },
-            onCancel: { fcCapture = nil; fcPlayedOnBase = nil }
+            onCancel: { pendingOutType = nil }
         ))
     }
 
@@ -563,10 +674,61 @@ struct LiveGameView: View {
         }
     }
 
-    // MARK: - Fielder's choice (which runner → safe or out)
+    // MARK: - On-field runner resolution (Safe/Out buttons)
 
-    /// Begin resolving a fielder's choice: stash the fielder and the runners, then let the dialogs
-    /// take over — a single runner goes straight to "safe or out?"; several first ask "which runner?".
+    /// Bases whose runner currently shows Safe/Out buttons on the field — the steal being resolved,
+    /// the double-play runners not yet cleared, or the fielder's-choice runners.
+    private var resolvingBases: [Int] {
+        if let steal = pendingSteal, stealIsSafe == nil { return [steal.fromBase] }
+        if let fc = fcCapture { return fc.runners.map(\.base) }
+        if let dp = pendingForcedDP {
+            if let callBase = forcedDPCallBase { return [callBase] }   // stage 1: lead's base (3 = plate)
+            if forcedDPPickingOut { return dp.runnersLeadFirst.dropFirst().map { $0.base + 1 } }  // stage 2
+        }
+        if outAtFirstAwaitingCall { return [3] }   // the runner coming home from third holds at the plate
+        return []
+    }
+
+    private var isResolvingRunners: Bool { !resolvingBases.isEmpty }
+
+    /// A Safe (`true`) / Out (`false`) button was tapped for the runner on `base`. Routes to whichever
+    /// flow is resolving.
+    private func resolveRunner(base: Int, safe: Bool) {
+        if pendingOutAtFirst != nil, outAtFirstAwaitingCall {
+            finalizeOutAtFirst(safe: safe)            // Safe → run scores; Out → runner out at home
+        } else if let dp = pendingForcedDP, forcedDPAwaitingCall {
+            resolveForcedDoublePlay(dp, safe: safe)   // Safe → lead safe (run if home); Out → lead out
+        } else if let dp = pendingForcedDP, forcedDPPickingOut {
+            pickForcedDoublePlayOut(dp, base: base, safe: safe)   // choose which trailing runner is out
+        } else if pendingSteal != nil, stealIsSafe == nil {
+            stealIsSafe = safe          // the reason menu takes over from here
+        } else if let fc = fcCapture {
+            resolveFieldersChoice(outcome: fc.outcome, fieldPosition: fc.position,
+                                  playedOnBase: base, out: !safe)
+        }
+    }
+
+    /// Abort whatever runner resolution is up — nothing is recorded. The forced double play never
+    /// touched the game state, so clearing its travelers snaps the runners back to their bases.
+    private func cancelResolution() {
+        pendingSteal = nil; stealIsSafe = nil
+        fcCapture = nil
+        if pendingForcedDP != nil {
+            pendingForcedDP = nil; forcedDPAwaitingCall = false; forcedDPPickingOut = false
+            animatingPlay = false
+            travelers.removeAll()
+        }
+        if pendingOutAtFirst != nil {
+            pendingOutAtFirst = nil; outAtFirstAwaitingCall = false
+            animatingPlay = false
+            travelers.removeAll()
+        }
+    }
+
+    // MARK: - Fielder's choice (tap Safe/Out on the runner played on)
+
+    /// Begin resolving a fielder's choice: stash the fielder + runners, then the on-field Safe/Out
+    /// buttons on each runner resolve it (tap the runner the play was made on).
     private func startFieldersChoice(outcome: PlateAppearanceOutcome, fieldPosition: FieldPosition?) {
         let runners = runnersOnBase.map { FCRunner(base: $0.index, player: $0.player) }
         // No runner to play on (shouldn't happen — the row is hidden) → treat as a plain reach.
@@ -574,7 +736,6 @@ struct LiveGameView: View {
             resolveFieldersChoice(outcome: outcome, fieldPosition: fieldPosition, playedOnBase: nil, out: false)
             return
         }
-        fcPlayedOnBase = runners.count == 1 ? runners[0].base : nil
         fcCapture = FieldersChoiceCapture(outcome: outcome, position: fieldPosition, runners: runners)
     }
 
@@ -593,13 +754,46 @@ struct LiveGameView: View {
                                 runsBefore: game.homeScore + game.awayScore)
         perform { game.recordFieldersChoice(outcome, playedOnBase: playedOnBase, runnerOut: out) }
         fcCapture = nil
-        fcPlayedOnBase = nil
     }
 
-    /// The runner the fielder's choice was made on — set directly for a lone runner, or chosen.
-    private var fcResolvedRunner: FCRunner? {
-        guard let capture = fcCapture else { return nil }
-        return capture.runners.first { $0.base == fcPlayedOnBase }
+    // MARK: - Steal / baserunning (drag a runner to a base)
+
+    /// Spoken target-base name for the Safe/Out + reason prompts.
+    private func stealBaseLabel(_ index: Int) -> String {
+        switch index {
+        case 0:  return "1st base"
+        case 1:  return "2nd base"
+        case 2:  return "3rd base"
+        default: return "home"
+        }
+    }
+
+    private func resolveStealSafe(_ reason: SafeAdvanceReason) {
+        applySteal(kind: reason == .stolenBase ? .steal : .baserunning) { steal in
+            game.recordSafeAdvance(fromBase: steal.fromBase, toBase: steal.toBase, reason: reason)
+        }
+    }
+
+    private func resolveStealOut(_ reason: OutReason) {
+        applySteal(kind: reason == .caughtStealing ? .caughtStealing : .baserunning) { steal in
+            game.recordBaserunningOut(fromBase: steal.fromBase, toBase: steal.toBase, reason: reason)
+        }
+    }
+
+    /// Snapshot for Undo, apply the engine move, then log it (with any run it scored).
+    private func applySteal(kind: PlayEventKind, _ apply: (PendingSteal) -> String) {
+        guard let steal = pendingSteal else { return }
+        let runner = game.runner(onBase: steal.fromBase)
+        let runsBefore = game.homeScore + game.awayScore
+        var detail = ""
+        perform { detail = apply(steal) }
+        let runs = max(0, (game.homeScore + game.awayScore) - runsBefore)
+        if !detail.isEmpty {
+            game.logPlay(kind, batter: runner, pitcher: game.activePitcher,
+                         detail: detail, runsScored: runs, context: modelContext)
+        }
+        pendingSteal = nil
+        stealIsSafe = nil
     }
 
     private var gameOverMessage: String {
@@ -616,11 +810,291 @@ struct LiveGameView: View {
 
     // MARK: - Recording an outcome (ghost-OFF hits → station-to-station + "did they score?")
 
+    /// After the fielder is tapped: a plain in-play OUT gets its specific kind (ground/line/fly/pop),
+    /// asking only when there's a choice (a ground ball has a single option, so it's auto-applied).
+    /// Everything else records straight through.
+    private func completeLocationCapture(outcome: PlateAppearanceOutcome,
+                                         type: BattedBallType?, position: FieldPosition) {
+        if outcome == .out, let type {
+            var options = type.outTypeOptions
+            // A ground ball with a runner on can instead be an "out at first" that advances the runners.
+            if type == .groundBall && !runnersOnBase.isEmpty { options.append(.outAtFirst) }
+            if canDoublePlay { options.append(.doublePlay) }
+            if canTriplePlay { options.append(.triplePlay) }
+            if options.count <= 1 {
+                recordOutcome(.out, battedBallType: type, fieldPosition: position,
+                              battedOutType: options.first)
+            } else {
+                pendingOutType = PendingOutType(type: type, position: position, options: options)
+            }
+            return
+        }
+        recordOutcome(outcome, battedBallType: type, fieldPosition: position)
+    }
+
+    /// A double play is possible: a runner is on base to double off, and there's room for two outs.
+    private var canDoublePlay: Bool {
+        !runnersOnBase.isEmpty && game.outs <= game.settings.outsPerInning - 2
+    }
+
+    /// A triple play is possible: no outs yet, room for three, and runners on first AND second (the two
+    /// force points behind the batter) — which covers first-and-second and bases loaded, but not
+    /// first-and-third, where the lead runner isn't forced.
+    private var canTriplePlay: Bool {
+        game.outs == 0 && game.outs <= game.settings.outsPerInning - 3
+            && game.runner(onBase: 0) != nil && game.runner(onBase: 1) != nil
+    }
+
+    /// Turn the chosen Double Play into an on-field result. Two or more runners run the animated forced
+    /// double play (everyone up a base, the lead runner gets the Safe/Out call); a lone runner doubles
+    /// off automatically.
+    private func startDoublePlay(type: BattedBallType, position: FieldPosition) {
+        let runners = runnersOnBase
+        if runners.count >= 2 {
+            startForcedDoublePlay(type: type, position: position)
+        } else if let only = runners.first {
+            applyDoublePlay(type: type, position: position, secondOutBase: only.index)
+        }
+    }
+
+    /// The animated triple play — fully deterministic, no prompts. The batter and both forced runners
+    /// (from first and second, plus the runner from third when the bases are loaded) each trot up a base
+    /// and fade: three outs, no runs (every out is a force, so no run counts), bases empty. Banked under
+    /// one Undo once the trot finishes.
+    private func startTriplePlay(type: BattedBallType, position: FieldPosition) {
+        guard let batterLine = game.currentBatterLine, let batter = batterLine.player else { return }
+        balls = 0; strikes = 0
+        animatingTriplePlay = true
+        animatingPlay = true                    // block the pad while the trot plays out
+        let draft = PlayDraft(outcome: .out, battedBallType: type, fieldPosition: position,
+                              battedOutType: .triplePlay, batter: batter, pitcher: game.activePitcher,
+                              inning: game.currentInning, isTop: game.isTopInning, outs: game.outs,
+                              runsBefore: game.homeScore + game.awayScore)
+        // The runners stay in the game state; these travelers are the visual play until it's banked. The
+        // batter fades at first; every runner slides up one base and fades — all out. The current batter
+        // is hidden (`hideBatter`) so the faded batter doesn't reappear under him.
+        var trot: [RunningRunner] = [
+            RunningRunner(id: batter.persistentModelID, player: batter,
+                          leg: -1, stopAt: 0, arrival: .fadeOnly)          // to first, out
+        ]
+        for base in 0..<3 {
+            if let r = game.runner(onBase: base) {
+                trot.append(RunningRunner(id: r.persistentModelID, player: r,
+                                          leg: base, stopAt: base + 1, arrival: .fadeOnly))
+            }
+        }
+        travelers = trot
+        beginTravel {
+            animatingPlay = false
+            animatingTriplePlay = false
+            pendingPlay = draft
+            perform {
+                game.finishTriplePlay(batterLine: batterLine)
+                travelers.removeAll()
+            }
+        }
+    }
+
+    /// The animated forced double play, for any set of two-plus runners. The batter runs to first and
+    /// fades the instant he arrives (out #1); every runner slides up one base and holds; the LEAD runner
+    /// (closest to home) waits at his new base for a Safe/Out call. OUT → the lead is the second out
+    /// there (no run, even from third); SAFE → the lead is safe (his run counts if he came home) and the
+    /// runner right behind him is the second out instead. Nothing hits the game state until the call, so
+    /// it's a single Undo. See `resolveForcedDoublePlay`.
+    private func startForcedDoublePlay(type: BattedBallType, position: FieldPosition) {
+        let runners = runnersOnBase.sorted { $0.index > $1.index }   // lead (highest base) first
+        guard runners.count >= 2, let batterLine = game.currentBatterLine,
+              let batter = batterLine.player else { return }
+        balls = 0; strikes = 0
+        animatingPlay = true                    // block the pad while the play develops
+        let draft = PlayDraft(outcome: .out, battedBallType: type, fieldPosition: position,
+                              battedOutType: .doublePlay, batter: batter, pitcher: game.activePitcher,
+                              inning: game.currentInning, isTop: game.isTopInning, outs: game.outs,
+                              runsBefore: game.homeScore + game.awayScore)
+        pendingForcedDP = ForcedDoublePlay(batterLine: batterLine,
+                                           runnersLeadFirst: runners.map { (base: $0.index, player: $0.player) },
+                                           draft: draft)
+        // The runners stay in the game state; these travelers are the visual play until the call. The
+        // batter fades the instant he reaches first (out #1); every runner slides up one base and holds.
+        // The current batter is hidden (`hideBatter`) so the faded batter doesn't reappear under him.
+        var trot: [RunningRunner] = [
+            RunningRunner(id: batter.persistentModelID, player: batter,
+                          leg: -1, stopAt: 0, arrival: .fadeOnly)          // to first, then out
+        ]
+        for r in runners {
+            trot.append(RunningRunner(id: r.player.persistentModelID, player: r.player,
+                                      leg: r.index, stopAt: r.index + 1, arrival: .hold))
+        }
+        travelers = trot
+        beginTravel {
+            animatingPlay = false
+            forcedDPAwaitingCall = true          // the lead runner's Safe/Out buttons appear
+        }
+    }
+
+    /// The base the lead runner is being called at (0/1/2 = a bag, 3 = the plate), or nil if no forced
+    /// double play is waiting — drives the on-field buttons, the routing, and the prompt text.
+    private var forcedDPCallBase: Int? {
+        guard let dp = pendingForcedDP, forcedDPAwaitingCall,
+              let lead = dp.runnersLeadFirst.first else { return nil }
+        return lead.base + 1
+    }
+
+    /// Stage 1 — the Safe/Out call on the lead runner. OUT → he's the second out (no run if he was
+    /// coming home), done. SAFE → he survives, scoring if he came home; with a single runner behind him
+    /// that runner is automatically the second out, but with TWO behind (bases loaded) we fade the lead
+    /// and ask which of the two trailing runners is out (`forcedDPPickingOut`).
+    private func resolveForcedDoublePlay(_ dp: ForcedDoublePlay, safe: Bool) {
+        guard safe else { finalizeForcedDoublePlay(dp, outIndex: 0); return }   // lead out
+        let trailing = dp.runnersLeadFirst.count - 1
+        if trailing <= 1 { finalizeForcedDoublePlay(dp, outIndex: 1); return }  // lone runner behind → auto
+        // Two runners behind: the lead is safe (fade him — he's scored if he came home), then ask.
+        forcedDPAwaitingCall = false
+        forcedDPPickingOut = true
+        let leadID = dp.runnersLeadFirst[0].player.persistentModelID
+        travelers.removeAll { $0.id == leadID }
+    }
+
+    /// Stage 2 (bases loaded) — the user tapped Safe/Out on one of the two trailing runners; the other
+    /// is the opposite. Out on a runner makes him the second out.
+    private func pickForcedDoublePlayOut(_ dp: ForcedDoublePlay, base: Int, safe: Bool) {
+        let trailing = Array(dp.runnersLeadFirst.enumerated().dropFirst())     // indices 1…
+        guard let tapped = trailing.first(where: { $0.element.base + 1 == base }),
+              let other = trailing.first(where: { $0.offset != tapped.offset }) else { return }
+        finalizeForcedDoublePlay(dp, outIndex: safe ? other.offset : tapped.offset)
+    }
+
+    /// Bank the play under one Undo — batter out plus the runner at `outIndex`, everyone else up a base
+    /// (scoring from third) — and clear the trot: survivors hand off to their base chips, the out fades.
+    private func finalizeForcedDoublePlay(_ dp: ForcedDoublePlay, outIndex: Int) {
+        forcedDPAwaitingCall = false
+        forcedDPPickingOut = false
+        pendingForcedDP = nil
+        pendingPlay = dp.draft
+        perform {
+            game.finishForcedDoublePlay(batterLine: dp.batterLine,
+                                        runnersLeadFirst: dp.runnersLeadFirst,
+                                        outIndex: outIndex)
+            travelers.removeAll()
+        }
+    }
+
+    /// Apply a double play. A ground ball / bunt is a force, so it animates in two beats — the runner
+    /// runs to the next bag and the batter to first, THEN both are out and fade off. A caught ball
+    /// (line/fly/pop) is doubled off in place, so it records immediately.
+    private func applyDoublePlay(type: BattedBallType, position: FieldPosition, secondOutBase: Int) {
+        guard type == .groundBall || type == .bunt,
+              let batterLine = game.currentBatterLine, let batter = batterLine.player,
+              let runner = game.runner(onBase: secondOutBase)
+        else {
+            applyDoublePlayImmediate(type: type, position: position, secondOutBase: secondOutBase)
+            return
+        }
+        balls = 0; strikes = 0
+        pushUndo()                              // snapshot the pre-play state for Undo
+        game.lastPlayInheritedCharges = []
+        animatingPlay = true                    // blocks the pad while the beats play out
+
+        let forcedBase = min(secondOutBase + 1, 2)
+        let draft = PlayDraft(outcome: .out, battedBallType: type, fieldPosition: position,
+                              battedOutType: .doublePlay, batter: batter, pitcher: game.activePitcher,
+                              inning: game.currentInning, isTop: game.isTopInning, outs: game.outs,
+                              runsBefore: game.homeScore + game.awayScore)
+
+        // Beat 1: the runners run — forced runner to the next bag, batter to first.
+        withAnimation(.easeInOut(duration: 0.4)) {
+            game.setRunner(nil, onBase: secondOutBase)
+            game.setRunner(runner, onBase: forcedBase)
+            game.setRunner(batter, onBase: 0)
+        } completion: {
+            // Beat 2: they're out — record it and fade them off.
+            pendingPlay = draft
+            withAnimation(.easeInOut(duration: 0.35)) {
+                game.finishGroundBallDoublePlay(batterLine: batterLine, runnerBase: forcedBase, batterBase: 0)
+            }
+            finishPlay()
+            animatingPlay = false
+        }
+    }
+
+    /// Record a double play in place (caught-ball, doubled off) and log it — no run to animate.
+    private func applyDoublePlayImmediate(type: BattedBallType, position: FieldPosition, secondOutBase: Int) {
+        balls = 0; strikes = 0
+        pendingPlay = PlayDraft(outcome: .out,
+                                battedBallType: type,
+                                fieldPosition: position,
+                                battedOutType: .doublePlay,
+                                batter: game.currentBatterLine?.player,
+                                pitcher: game.activePitcher,
+                                inning: game.currentInning,
+                                isTop: game.isTopInning,
+                                outs: game.outs,
+                                runsBefore: game.homeScore + game.awayScore)
+        perform { game.recordDoublePlay(secondOutBase: secondOutBase) }
+    }
+
+    // MARK: - Out at first (batter out at first, runners advance a base — the ground out / sac bunt)
+
+    /// An out at first (a ground ball or a sacrifice bunt), with the runners moving up a base. The batter
+    /// runs to first and fades (the out); every runner slides up one bag. If a runner is coming home from
+    /// third he holds at the plate for a Safe/Out call (the run only counts if he's safe); otherwise the
+    /// play records the moment the trot finishes. `outType` distinguishes the two for the log
+    /// (`.outAtFirst` vs `.buntOutAtFirst`). Nothing hits the game state until it's finalized, so it's a
+    /// single Undo — cancelling snaps the runners back.
+    private func startOutAtFirst(type: BattedBallType, position: FieldPosition, outType: BattedOutType) {
+        guard let batterLine = game.currentBatterLine, let batter = batterLine.player else { return }
+        balls = 0; strikes = 0
+        animatingPlay = true                    // block the pad while the trot plays out
+        let draft = PlayDraft(outcome: .out, battedBallType: type, fieldPosition: position,
+                              battedOutType: outType, batter: batter, pitcher: game.activePitcher,
+                              inning: game.currentInning, isTop: game.isTopInning, outs: game.outs,
+                              runsBefore: game.homeScore + game.awayScore)
+        pendingOutAtFirst = OutAtFirstPlay(batterLine: batterLine, draft: draft)
+
+        // The runners stay in the game state; these travelers are the visual play until it's finalized.
+        // The batter fades the instant he reaches first (the out); every runner slides up one base and
+        // holds (the runner from third holds at the plate, awaiting his Safe/Out call).
+        var trot: [RunningRunner] = [
+            RunningRunner(id: batter.persistentModelID, player: batter,
+                          leg: -1, stopAt: 0, arrival: .fadeOnly)          // to first, then out
+        ]
+        for base in 0..<3 {
+            if let r = game.runner(onBase: base) {
+                trot.append(RunningRunner(id: r.persistentModelID, player: r,
+                                          leg: base, stopAt: base + 1, arrival: .hold))
+            }
+        }
+        travelers = trot
+        beginTravel {
+            animatingPlay = false
+            if game.runner(onBase: 2) != nil {
+                outAtFirstAwaitingCall = true    // the runner from third holds at the plate for the call
+            } else {
+                finalizeOutAtFirst(safe: nil)    // no one coming home — just record it
+            }
+        }
+    }
+
+    /// Bank the out-at-first under one Undo — the batter out at first, the runners up a base, and the
+    /// runner from third scored (`safe == true`), thrown out at home (`false`), or absent (`nil`) — then
+    /// clear the trot so the survivors hand off to their base chips.
+    private func finalizeOutAtFirst(safe: Bool?) {
+        guard let play = pendingOutAtFirst else { return }
+        outAtFirstAwaitingCall = false
+        pendingOutAtFirst = nil
+        pendingPlay = play.draft
+        perform {
+            game.finishOutAtFirst(batterLine: play.batterLine, runnerHomeSafe: safe)
+            travelers.removeAll()
+        }
+    }
+
     /// Entry point for every outcome button. Ghost-runners-OFF hits (1B/2B/3B) run the interactive
     /// station-to-station resolver; everything else (ghost-ON, HR, walks, outs) records directly.
     private func recordOutcome(_ outcome: PlateAppearanceOutcome,
                                battedBallType: BattedBallType? = nil,
-                               fieldPosition: FieldPosition? = nil) {
+                               fieldPosition: FieldPosition? = nil,
+                               battedOutType: BattedOutType? = nil) {
         // A fielder's choice needs the "which runner / safe or out?" prompts before anything is
         // applied, so it takes its own path (the fielder location has already been chosen).
         if outcome.isFieldersChoice {
@@ -632,12 +1106,24 @@ struct LiveGameView: View {
         let draft = PlayDraft(outcome: outcome,
                               battedBallType: battedBallType,
                               fieldPosition: fieldPosition,
+                              battedOutType: battedOutType,
                               batter: game.currentBatterLine?.player,
                               pitcher: game.activePitcher,
                               inning: game.currentInning,
                               isTop: game.isTopInning,
                               outs: game.outs,
                               runsBefore: game.homeScore + game.awayScore)
+
+        // A home run sends everyone around the bases — its own trot, regardless of ghost-runner mode.
+        if outcome == .homeRun {
+            recordHomeRun(draft: draft)
+            return
+        }
+        // A sacrifice fly trots the runner on third home to score.
+        if outcome == .sacrificeFly {
+            recordSacFly(draft: draft)
+            return
+        }
 
         guard !game.settings.ghostRunners,
               let baseCount = hitBaseCount(outcome),
@@ -655,6 +1141,50 @@ struct LiveGameView: View {
         pendingPlay = draft
         game.record(outcome, resolveBasesExternally: true)  // stats/outs/order only — no base moves
         startHitResolution(batter: batter, baseCount: baseCount, hitNoun: hitNoun(outcome))
+    }
+
+    /// A home run: the batter and everyone aboard circle the bases and score. We credit the runs and
+    /// stats up front (one undo snapshot) and then run the trot as a purely visual layer — the chips
+    /// are travelers, so the already-cleared bases don't fight the animation.
+    private func recordHomeRun(draft: PlayDraft) {
+        balls = 0; strikes = 0
+        pushUndo()
+        game.lastPlayInheritedCharges = []
+        pendingPlay = draft
+        guard let batter = game.currentBatterLine?.player else {
+            game.record(.homeRun); finishPlay(); return
+        }
+        // Snapshot the trot BEFORE recording, since `record` clears the bases and advances the order.
+        var trot: [RunningRunner] = []
+        for base in 0..<3 {
+            if let r = game.runner(onBase: base) {
+                trot.append(RunningRunner(id: r.persistentModelID, player: r,
+                                          leg: base, stopAt: 4, arrival: .fadeOnly))
+            }
+        }
+        trot.append(RunningRunner(id: batter.persistentModelID, player: batter,
+                                  leg: -1, stopAt: 4, arrival: .fadeOnly))
+        travelers = trot            // take over the field first, so clearing the bases is invisible…
+        game.record(.homeRun)       // …then bank the runs, RBIs, and stats
+        beginTravel { finishPlay() }
+    }
+
+    /// A sacrifice fly: the batter is out and the runner on third tags and trots home to score. We bank
+    /// the run/out up front, then run him home as a purely visual layer (like the home-run trot).
+    private func recordSacFly(draft: PlayDraft) {
+        balls = 0; strikes = 0
+        pushUndo()
+        game.lastPlayInheritedCharges = []
+        pendingPlay = draft
+        guard let scorer = game.runner(onBase: 2) else {   // no one on third — just record it
+            game.record(.sacrificeFly); finishPlay(); return
+        }
+        // The runner from third takes over as a traveler (so clearing him from the bag is invisible),
+        // then the run and the out bank, then he trots home and fades as he scores.
+        travelers = [RunningRunner(id: scorer.persistentModelID, player: scorer,
+                                   leg: 2, stopAt: 4, arrival: .fadeOnly)]
+        game.record(.sacrificeFly)
+        beginTravel { finishPlay() }
     }
 
     /// Which buttons open the contact-type + location capture before recording: the plain hits, the
@@ -726,14 +1256,20 @@ struct LiveGameView: View {
 
             if desired >= 3 && res.ahead >= 3 {
                 // A true walk-in — a single with every base behind loaded — is forced home with no
-                // choice, so score it silently. Otherwise it's the runner's call, so we ask.
+                // choice, so trot him home to score (in tandem with the rest). Otherwise it's the
+                // runner's call, so we ask.
                 if res.baseCount == 1 && forced {
-                    game.scorePendingRunner(player, rbiTo: game.previousBatterLine)
+                    travelers.append(RunningRunner(id: player.persistentModelID, player: player,
+                                                   leg: startBase, stopAt: 4,
+                                                   arrival: .scorePending(game.previousBatterLine)))
                     res.ahead = 3
                     res.index += 1
                     continue
                 }
-                // Clear path home, runner's choice → ask (paused until the alert is answered).
+                // Clear path home, runner's choice → ask (paused until the alert is answered). Put him
+                // back on his base first, so he's visible to decide about — and has somewhere to run
+                // FROM if he scores.
+                game.setRunner(player, onBase: startBase)
                 resolution = res
                 let name = player.name, noun = res.hitNoun
                 DispatchQueue.main.async {   // let any prior alert fully dismiss before re-presenting
@@ -749,6 +1285,7 @@ struct LiveGameView: View {
             // Not forced, but a base is there for the taking (e.g. a runner on 2nd going to third on
             // a single with first base open) → it's discretionary, so ask instead of auto-advancing.
             if !forced && target > startBase {
+                game.setRunner(player, onBase: startBase)   // show him on his base while we ask
                 resolution = res
                 let name = player.name, base = baseLabel(target)
                 DispatchQueue.main.async {   // let any prior alert fully dismiss before re-presenting
@@ -759,15 +1296,25 @@ struct LiveGameView: View {
                 return
             }
 
-            // Forced (or nowhere further to go) → advance automatically.
-            if target >= 0 { game.setRunner(player, onBase: target); res.ahead = target }
+            // Forced (or nowhere further to go) → queue his advance as a trot, so he rounds the bases
+            // in tandem with the batter and the other runners rather than snapping to his new bag.
+            if target >= 0 {
+                travelers.append(RunningRunner(id: player.persistentModelID, player: player,
+                                               leg: startBase, stopAt: target,
+                                               arrival: .stopOnBase(target)))
+                res.ahead = target
+            }
             res.index += 1
         }
-        // Everyone placed → the batter takes his base behind them.
+        // Everyone's advance is queued → add the batter and trot them all home together.
         let batterTarget = min(res.baseCount - 1, res.ahead - 1)
-        if batterTarget >= 0 { game.setRunner(res.batter, onBase: batterTarget) }
         resolution = nil
-        finishPlay()
+        if batterTarget >= 0 {
+            travelers.append(RunningRunner(id: res.batter.persistentModelID, player: res.batter,
+                                           leg: -1, stopAt: batterTarget,
+                                           arrival: .stopOnBase(batterTarget)))
+        }
+        if travelers.isEmpty { finishPlay() } else { beginTravel { finishPlay() } }
     }
 
     private func answerHitPrompt(advanced: Bool) {
@@ -775,14 +1322,28 @@ struct LiveGameView: View {
         let (startBase, player) = res.runners[res.index]
         let isScore = prompt.targetBase >= 3
 
+        // A runner who scores gets the staged "run home": his chip rounds the bases one leg at a time,
+        // then the run counts and he fades off, before we resolve the rest of the play.
+        if advanced && isScore {
+            let rbiLine = game.previousBatterLine
+            res.ahead = 3            // he's home; runners behind can still advance up to third
+            res.index += 1
+            resolution = res
+            currentScoringPrompt = nil
+            game.setRunner(nil, onBase: startBase)   // hand his base chip off to the trotting chip
+            travelers = [RunningRunner(id: player.persistentModelID, player: player,
+                                       leg: startBase, stopAt: 4, arrival: .scorePending(rbiLine))]
+            beginTravel { resolveHitStep() }
+            return
+        }
+
+        // Everything else just settles onto a base (the field animates the slide on its own). Lift him
+        // off the base he was parked on for the prompt FIRST — `setRunner` only writes the destination,
+        // so advancing him without this would leave a duplicate of him behind on his old bag.
+        game.setRunner(nil, onBase: startBase)
         if advanced {
-            if isScore {
-                game.scorePendingRunner(player, rbiTo: game.previousBatterLine)  // RBI → the hitter
-                res.ahead = 3   // he's home; runners behind can still advance up to third
-            } else {
-                game.setRunner(player, onBase: prompt.targetBase)
-                res.ahead = prompt.targetBase
-            }
+            game.setRunner(player, onBase: prompt.targetBase)   // took the extra base
+            res.ahead = prompt.targetBase
         } else if isScore {
             // Held short of home — third if open, otherwise one base back so nobody stacks.
             let target = min(2, res.ahead - 1)
@@ -797,6 +1358,70 @@ struct LiveGameView: View {
         resolution = res
         currentScoringPrompt = nil
         resolveHitStep()
+    }
+
+    /// How long each base-to-base leg of a trot takes. Short enough to feel like running, long enough
+    /// to read as touching each bag.
+    static let baseLegDuration: Double = 0.32
+
+    /// A runner trotting the bases: drawn at `leg` (-1 = home, 0/1/2 = bags, 3 = across the plate),
+    /// stepped up to `stopAt`, then resolved by `arrival`.
+    struct RunningRunner: Identifiable {
+        let id: PersistentIdentifier
+        let player: Player
+        var leg: Int
+        let stopAt: Int
+        let arrival: Arrival
+
+        /// What becomes of the runner once he reaches `stopAt`.
+        enum Arrival {
+            case stopOnBase(Int)                 // settle onto this base as a live runner
+            case scorePending(GameStatLine?)     // credit a run (RBI → this line), then fade
+            case fadeOnly                        // just fade — the caller already credited the run
+            case hold                            // stay put on the field until the caller resolves him
+        }
+
+        var isHold: Bool { if case .hold = arrival { return true }; return false }
+    }
+
+    /// Kick off a trot: let the freshly-inserted travelers render at their START legs for one runloop
+    /// tick, THEN begin stepping. Without this gap the insert and the first step collapse into one
+    /// render and the chip pops onto the next bag instead of running to it.
+    private func beginTravel(then finish: @escaping () -> Void) {
+        DispatchQueue.main.async { driveTravelers(then: finish) }
+    }
+
+    /// Advance every traveler one leg (in parallel), pausing `baseLegDuration` between legs so the
+    /// field's value-based animation slides each chip bag to bag, resolving any who reach their stop —
+    /// until none remain, then run `finish`.
+    private func driveTravelers(then finish: @escaping () -> Void) {
+        guard travelers.contains(where: { $0.leg < $0.stopAt }) else {
+            resolveArrivedTravelers()
+            finish()
+            return
+        }
+        for i in travelers.indices where travelers[i].leg < travelers[i].stopAt {
+            travelers[i].leg += 1
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.baseLegDuration) {
+            resolveArrivedTravelers()
+            driveTravelers(then: finish)
+        }
+    }
+
+    /// Settle or score every traveler that has reached its stop, then drop them from the list. A
+    /// `stopOnBase` runner hands off to a base chip of the same id (no blink); the rest fade. A `.hold`
+    /// runner stays on the field (and in the list) until the caller resolves him — e.g. a play at the
+    /// plate awaiting a Safe/Out call.
+    private func resolveArrivedTravelers() {
+        for t in travelers where t.leg >= t.stopAt {
+            switch t.arrival {
+            case .stopOnBase(let base):      game.setRunner(t.player, onBase: base)
+            case .scorePending(let rbiLine): game.scorePendingRunner(t.player, rbiTo: rbiLine)
+            case .fadeOnly, .hold:           break
+            }
+        }
+        travelers.removeAll { $0.leg >= $0.stopAt && !$0.isHold }
     }
 
     private var scoringPromptBinding: Binding<Bool> {
@@ -831,6 +1456,7 @@ struct LiveGameView: View {
                          outcome: draft.outcome,
                          battedBallType: draft.battedBallType,
                          fieldPosition: draft.fieldPosition,
+                         battedOutType: draft.battedOutType,
                          batter: draft.batter,
                          pitcher: draft.pitcher,
                          runsScored: drovein,
@@ -874,7 +1500,8 @@ struct LiveGameView: View {
         redoStack.removeAll()
     }
 
-    /// Snapshot the game, then run the mutating action — so Undo can revert it.
+    /// Snapshot the game, then run the mutating action — so Undo can revert it. The field's value-based
+    /// animation slides the runners to their new bases (and fades out/scored players) on its own.
     private func perform(_ action: () -> Void) {
         pushUndo()
         game.lastPlayInheritedCharges = []   // per-play scratch; finishPlay reads what this play adds
@@ -884,7 +1511,8 @@ struct LiveGameView: View {
 
     private func undo() {
         guard let snapshot = undoStack.popLast() else { return }
-        // Remember where we were so Redo can come back, then roll the game AND its play log back.
+        // Remember where we were so Redo can come back, then roll the game AND its play log back — the
+        // field animates the runners sliding home for free.
         redoStack.append(game.snapshot())
         game.restore(from: snapshot, context: modelContext)
     }
@@ -956,14 +1584,6 @@ struct LiveGameView: View {
         ["1st Base", "2nd Base", "3rd Base"][index]
     }
 
-    /// Credit a stolen base and note it in the log.
-    private func recordSteal(_ line: GameStatLine) {
-        perform { line.batting.stolenBases += 1 }
-        let who = line.player?.name ?? "Runner"
-        game.logPlay(.steal, batter: line.player, pitcher: game.activePitcher,
-                     detail: "\(who) steals a base.", context: modelContext)
-    }
-
     /// Send a runner home by hand (ghost-runners-OFF) and note it in the log.
     private func scoreManualRun(base: Int, rbiLine: GameStatLine?) {
         let runner = game.runner(onBase: base)
@@ -995,12 +1615,13 @@ struct LiveGameView: View {
         Button { advanceHalfInning() } label: {
             Label("Go to \(nextHalfLabel)", systemImage: "arrow.turn.down.right")
         }
-        Button { showSubstitution = true } label: {
-            Label("Substitute Player", systemImage: "arrow.left.arrow.right")
-        }
         if game.settings.challenges > 0 {
             Button { showChallengeTeamPicker = true } label: {
                 Label("Challenge", systemImage: "hand.raised")
+            }
+            // A read-only recap: how many each team has left, and who challenged / when / the result.
+            Button { showChallenges = true } label: {
+                Label("View Challenges", systemImage: "flag.2.crossed")
             }
         }
         Divider()
@@ -1010,9 +1631,28 @@ struct LiveGameView: View {
         Button { showSummary = true } label: {
             Label("Game Summary", systemImage: "list.bullet.rectangle")
         }
+        // A read-only glance at the rulebook this game is running under — not the editor.
+        Button { showGameOptions = true } label: {
+            Label("See Current Game Options", systemImage: "slider.horizontal.3")
+        }
         Divider()
+        // Step away without finishing — the game stays in progress and can be resumed later.
+        Button { finishGameLater() } label: {
+            Label("Finish Game Later", systemImage: "pause.circle")
+        }
         Button(role: .destructive) { showEndConfirm = true } label: {
             Label("End Game", systemImage: "flag.checkered")
+        }
+    }
+
+    /// Leave the game exactly as it is (still `.inProgress`) and go back where the user came from —
+    /// the bracket for a tournament match, otherwise the main menu. Nothing is finalized, so it stays
+    /// resumable (Exhibition's Resume button, or the Season / Tournament hubs).
+    private func finishGameLater() {
+        if let onExit {
+            onExit()
+        } else {
+            router.returnToMainMenu()
         }
     }
 
@@ -1101,6 +1741,7 @@ struct PlayDraft {
     /// balls (hits and in-play outs), nil for walks, strikeouts, and HBP.
     var battedBallType: BattedBallType? = nil
     var fieldPosition: FieldPosition? = nil
+    var battedOutType: BattedOutType? = nil
     let batter: Player?
     let pitcher: Player?
     let inning: Int
@@ -1145,6 +1786,37 @@ private struct FieldersChoiceCapture: Identifiable {
     let outcome: PlateAppearanceOutcome
     let position: FieldPosition?
     let runners: [FCRunner]
+}
+
+// A runner dragged from `fromBase` to `toBase` (3 = home), awaiting Safe/Out + a reason.
+private struct PendingSteal: Identifiable {
+    let id = UUID()
+    let fromBase: Int
+    let toBase: Int
+}
+
+// A batted out with its contact type + fielder chosen, awaiting the specific out kind.
+private struct PendingOutType: Identifiable {
+    let id = UUID()
+    let type: BattedBallType
+    let position: FieldPosition
+    let options: [BattedOutType]
+}
+
+// A double play awaiting the "which runner was doubled off?" choice (multiple runners on base).
+// A forced double play (2+ runners) waiting on the Safe/Out call on the lead runner. Holds who's
+// involved (lead runner first) and the pre-play draft, so both outs (and any run) log as one play.
+private struct ForcedDoublePlay {
+    let batterLine: GameStatLine
+    let runnersLeadFirst: [(base: Int, player: Player)]
+    let draft: PlayDraft
+}
+
+// An "out at first" ground ball waiting on the Safe/Out call for a runner coming home from third.
+// Holds the batter's line and the pre-play draft so the out (and any run) log as one play.
+private struct OutAtFirstPlay {
+    let batterLine: GameStatLine
+    let draft: PlayDraft
 }
 
 // The runner being sent home via the "Run" button (drives the RBI picker sheet).
@@ -1288,13 +1960,25 @@ private struct LineupPickerSheets: ViewModifier {
     @Bindable var game: Game
     @Binding var showBatterPicker: Bool
     @Binding var showPitcherPicker: Bool
-    @Binding var showSubstitution: Bool
-    @Binding var showStealPicker: Bool
     let pitcherChangeAlert: Binding<Bool>
     let pitcherChangeError: String?
     let onPitcherChosen: (Player) -> Void
     let onOverridePitcher: () -> Void
-    let onSteal: (GameStatLine) -> Void
+
+    /// Has the fielding team used all its All-Team-Pitch changes? (Only injury overrides remain.)
+    private var pitcherChangeAtCap: Bool {
+        game.settings.allTeamPitch && game.activePitcherSwaps >= Game.pitchingChangeCap
+    }
+
+    /// The pitching-change count shown in the Select Pitcher sheet — nil when All Team Pitch is off
+    /// (no cap to report).
+    private var pitcherChangeNote: String? {
+        guard game.settings.allTeamPitch else { return nil }
+        let used = game.activePitcherSwaps, cap = Game.pitchingChangeCap
+        return used >= cap
+            ? "\(used) of \(cap) pitching changes used — injury override only"
+            : "Pitching changes: \(used) of \(cap) used"
+    }
 
     func body(content: Content) -> some View {
         content
@@ -1310,18 +1994,10 @@ private struct LineupPickerSheets: ViewModifier {
             .sheet(isPresented: $showPitcherPicker) {
                 LinePicker(title: "Select Pitcher", lines: game.lineup(isHome: !game.battingIsHome),
                            subtitle: game.activePitcher.map { "Current Pitcher: \($0.name)" },
+                           note: pitcherChangeNote,
+                           noteIsWarning: pitcherChangeAtCap,
                            selectedPlayer: game.activePitcher) { line in
                     if let player = line.player { onPitcherChosen(player) }
-                }
-            }
-            .sheet(isPresented: $showSubstitution) {
-                SubstitutionView(game: game)
-            }
-            // Credit a stolen base to any batter in the lineup (undoable).
-            .sheet(isPresented: $showStealPicker) {
-                LinePicker(title: "Stolen Base — who?", lines: game.battingLineup,
-                           subtitle: "Credit the stolen base to the baserunner.") { line in
-                    onSteal(line)
                 }
             }
             .alert("Can't Swap Pitcher", isPresented: pitcherChangeAlert, presenting: pitcherChangeError) { _ in
@@ -1420,57 +2096,70 @@ private struct ChallengeDialogs: ViewModifier {
     }
 }
 
-// MARK: - Fielder's-choice dialogs
+// MARK: - Steal reason dialog
 
-/// The fielder's-choice resolution: an optional "which runner was played on?" step (only when more
-/// than one is on base), then "safe or out?". Bundled as a modifier to keep LiveGameView's long
-/// presentation chain under the Swift type-checker's limit, like the other dialog modifiers.
-private struct FieldersChoiceDialogs: ViewModifier {
-    let capture: FieldersChoiceCapture?
-    @Binding var playedOnBase: Int?
-    let baseName: (Int) -> String
-    let onChoose: (Int) -> Void
-    let onResolve: (Bool) -> Void
+/// The reason menu shown after a dragged runner's on-field Safe/Out call — the safe reasons (stolen
+/// base, error…) or the out reasons (caught stealing, picked off…). The Safe/Out choice itself is on
+/// the field now, so this is just the follow-up.
+private struct StealReasonDialog: ViewModifier {
+    let steal: PendingSteal?
+    let isSafe: Bool?
+    let baseLabel: (Int) -> String
+    let onSafeReason: (SafeAdvanceReason) -> Void
+    let onOutReason: (OutReason) -> Void
     let onCancel: () -> Void
 
     func body(content: Content) -> some View {
-        content
-            .confirmationDialog("Which runner was played on?", isPresented: chooserShown,
-                                titleVisibility: .visible) {
-                if let capture {
-                    ForEach(capture.runners) { runner in
-                        Button("\(runner.player.name) — \(baseName(runner.base))") { onChoose(runner.base) }
-                    }
+        content.confirmationDialog(reasonTitle, isPresented: shown, titleVisibility: .visible) {
+            if isSafe == true {
+                ForEach(SafeAdvanceReason.allCases, id: \.self) { reason in
+                    Button(reason.label) { onSafeReason(reason) }
                 }
-                Button("Cancel", role: .cancel) { onCancel() }
+            } else {
+                ForEach(OutReason.allCases, id: \.self) { reason in
+                    Button(reason.label) { onOutReason(reason) }
+                }
             }
-            .confirmationDialog(safeOutTitle, isPresented: safeOutShown, titleVisibility: .visible) {
-                Button("Safe") { onResolve(false) }
-                Button("Out", role: .destructive) { onResolve(true) }
-                Button("Cancel", role: .cancel) { onCancel() }
-            } message: {
-                Text("Was the runner safe, or retired on the play?")
-            }
-    }
-
-    /// Step 1 appears only with more than one runner and before one is chosen. Dismissing it without
-    /// a choice cancels the whole play.
-    private var chooserShown: Binding<Bool> {
-        Binding(get: { (capture?.runners.count ?? 0) > 1 && playedOnBase == nil },
-                set: { if !$0 && playedOnBase == nil { onCancel() } })
-    }
-
-    /// Step 2 appears once the runner is known (immediately for a lone runner).
-    private var safeOutShown: Binding<Bool> {
-        Binding(get: { capture != nil && playedOnBase != nil },
-                set: { if !$0 { onCancel() } })
-    }
-
-    private var safeOutTitle: String {
-        guard let runner = capture?.runners.first(where: { $0.base == playedOnBase }) else {
-            return "Safe or Out?"
+            Button("Cancel", role: .cancel) { onCancel() }
         }
-        return "\(runner.player.name) — Safe or Out?"
+    }
+
+    /// Shown once the on-field Safe/Out is known (isSafe non-nil) for the dragged runner.
+    private var shown: Binding<Bool> {
+        Binding(get: { steal != nil && isSafe != nil }, set: { if !$0 { onCancel() } })
+    }
+
+    private var reasonTitle: String {
+        guard let steal else { return "" }
+        let base = baseLabel(steal.toBase)
+        return isSafe == true
+            ? "How did the runner take \(base)?"
+            : "How did the runner get out at \(base)?"
+    }
+}
+
+// MARK: - Out-type dialog
+
+/// After a batted out's fielder is tapped: pick the specific out kind (Fly Out, Line Out (Foul)…).
+/// Only presented when the contact type offers more than one option.
+private struct OutTypeDialog: ViewModifier {
+    let pending: PendingOutType?
+    let onChoose: (BattedOutType) -> Void
+    let onCancel: () -> Void
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog("What kind of out?", isPresented: shown, titleVisibility: .visible) {
+            if let pending {
+                ForEach(pending.options, id: \.self) { out in
+                    Button(out.label) { onChoose(out) }
+                }
+            }
+            Button("Cancel", role: .cancel) { onCancel() }
+        }
+    }
+
+    private var shown: Binding<Bool> {
+        Binding(get: { pending != nil }, set: { if !$0 { onCancel() } })
     }
 }
 
@@ -1544,6 +2233,10 @@ private struct LinePicker: View {
     let title: String
     let lines: [GameStatLine]
     var subtitle: String? = nil
+    /// An extra line under the subtitle (e.g. the All-Team-Pitch change count). `noteIsWarning`
+    /// colors it as a caution once the cap is reached.
+    var note: String? = nil
+    var noteIsWarning: Bool = false
     var selectedPlayer: Player? = nil
     let onSelect: (GameStatLine) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -1557,6 +2250,13 @@ private struct LinePicker: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal)
                         .padding(.top, 8)
+                }
+                if let note {
+                    Text(note)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(noteIsWarning ? .orange : .secondary)
+                        .padding(.horizontal)
+                        .padding(.top, subtitle == nil ? 8 : 3)
                 }
                 List(lines) { line in
                     Button {

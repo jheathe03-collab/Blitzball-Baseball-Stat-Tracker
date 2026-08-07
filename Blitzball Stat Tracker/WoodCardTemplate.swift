@@ -210,7 +210,7 @@ struct WoodCardBack: View {
         [("G", "\(games)"), ("AB", "\(batting.atBats)"), ("H", "\(batting.hits)"),
          ("2B", "\(batting.doubles)"), ("3B", "\(batting.triples)"), ("HR", "\(batting.homeRuns)"),
          ("RBI", "\(batting.rbi)"), ("R", "\(batting.runsScored)"), ("BB", "\(batting.walks)"),
-         ("K", "\(batting.strikeouts)"), ("SB", "\(batting.stolenBases)"),
+         ("K", "\(batting.strikeouts)"), ("SB", "\(batting.stolenBases)"), ("CS", "\(batting.caughtStealing)"),
          ("AVG", StatFormat.rate(batting.battingAverage)),
          ("OBP", StatFormat.rate(batting.onBasePercentage)),
          ("SLG", StatFormat.rate(batting.sluggingPercentage)),

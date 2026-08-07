@@ -71,6 +71,10 @@ extension Game {
 
     // MARK: - All-Team-Pitch (pitching-change rules)
 
+    /// How many non-injury pitching changes each team gets under All-Team-Pitch. Injury overrides
+    /// don't count against it.
+    static let pitchingChangeCap = 2
+
     /// The fielding side's current-pitcher outs this stint.
     var activePitcherOuts: Int {
         get { battingIsHome ? awayPitcherOuts : homePitcherOuts }
@@ -93,8 +97,8 @@ extension Game {
             if activePitcherOuts < 1 {
                 return "Player needs a K or Out to swap out."
             }
-            if activePitcherSwaps >= 2 {
-                return "This team has already used its 2 pitching changes. Use Override for an injury."
+            if activePitcherSwaps >= Game.pitchingChangeCap {
+                return "This team has already used its \(Game.pitchingChangeCap) pitching changes. Use Override for an injury."
             }
         }
         activePitcher = newPlayer
@@ -304,6 +308,111 @@ extension Game {
         recordResponsibilityForNewRunners()
     }
 
+    /// A double play: the batter is out (an at-bat, no hit, like any out) and the runner on
+    /// `secondOutBase` is doubled off. Two outs go on the board (charged to the pitcher), and it can
+    /// end the half-inning. Other runners hold — nudge them on the diamond for the rare extra advance.
+    func recordDoublePlay(secondOutBase: Int) {
+        guard let batter = currentBatterLine else { return }
+        batter.batting.record(.out)
+        activePitcherLine?.pitching.recordAllowed(.out)   // the batter's out (outsRecorded += 1)
+
+        setRunner(nil, onBase: secondOutBase)             // the runner is doubled off
+        outs += 2
+        activePitcherLine?.pitching.outsRecorded += 1     // the runner's out (batter's counted above)
+        if battingIsHome { awayPitcherOuts += 2 } else { homePitcherOuts += 2 }
+
+        advanceBatter()
+        if outs >= settings.outsPerInning && !isComplete { advanceHalfInning() }
+    }
+
+    /// The "outs" beat of a staged ground-ball double play, after the forced runner and batter have
+    /// visibly advanced (the runner to `runnerBase`, the batter to `batterBase`). Records the batter's
+    /// out, clears both, and puts the two outs on the board — able to end the half-inning.
+    func finishGroundBallDoublePlay(batterLine: GameStatLine, runnerBase: Int, batterBase: Int) {
+        batterLine.batting.record(.out)
+        activePitcherLine?.pitching.recordAllowed(.out)   // the batter's out
+        setRunner(nil, onBase: runnerBase)
+        setRunner(nil, onBase: batterBase)
+        outs += 2
+        activePitcherLine?.pitching.outsRecorded += 1     // the runner's out (batter's counted above)
+        if battingIsHome { awayPitcherOuts += 2 } else { homePitcherOuts += 2 }
+        advanceBatter()
+        if outs >= settings.outsPerInning && !isComplete { advanceHalfInning() }
+    }
+
+    /// Resolve a forced double play once the trot has played out: the batter is out at first, and
+    /// `runnersLeadFirst[outIndex]` (lead runner first, highest base) is the second out. Every other
+    /// runner is credited one base — scoring if that base is home (index 3), no RBI since the batter hit
+    /// into the play. So an out on the lead reaching home means no run; anyone else out lets the lead's
+    /// run count. Two outs; can end the half-inning.
+    func finishForcedDoublePlay(batterLine: GameStatLine,
+                                runnersLeadFirst: [(base: Int, player: Player)],
+                                outIndex: Int) {
+        batterLine.batting.record(.out)                   // the batter, out at first
+        activePitcherLine?.pitching.recordAllowed(.out)
+
+        for r in runnersLeadFirst { setRunner(nil, onBase: r.base) }   // clear the starting bases
+
+        for (i, r) in runnersLeadFirst.enumerated() where i != outIndex {
+            let dest = r.base + 1
+            if dest >= 3 { scoreRun(by: r.player) } else { setRunner(r.player, onBase: dest) }
+        }
+
+        outs += 2
+        activePitcherLine?.pitching.outsRecorded += 1     // the second out (the batter's is counted above)
+        if battingIsHome { awayPitcherOuts += 2 } else { homePitcherOuts += 2 }
+        advanceBatter()
+        if outs >= settings.outsPerInning && !isComplete { advanceHalfInning() }
+    }
+
+    /// A triple play: the batter and two forced runners are all out for three outs on one batted ball.
+    /// Every runner is a force (first and second are occupied), so no run scores — a run never counts
+    /// when the third out is a force out — and the bases clear. Charged to the pitcher; ends the
+    /// half-inning under the standard three-out rule.
+    func finishTriplePlay(batterLine: GameStatLine) {
+        batterLine.batting.record(.out)                   // the batter, out at first
+        activePitcherLine?.pitching.recordAllowed(.out)   // outsRecorded += 1 for the batter
+
+        runnerFirst = nil; runnerSecond = nil; runnerThird = nil   // all forced out (or stranded, no run)
+
+        outs += 3
+        activePitcherLine?.pitching.outsRecorded += 2     // the two runners (the batter's is counted above)
+        if battingIsHome { awayPitcherOuts += 3 } else { homePitcherOuts += 3 }
+        advanceBatter()
+        if outs >= settings.outsPerInning && !isComplete { advanceHalfInning() }
+    }
+
+    /// An "out at first" ground ball: the batter is out at first (an at-bat, no hit) and every runner
+    /// advances one base. A runner coming home from third is resolved by the caller's Safe/Out call:
+    /// `runnerHomeSafe == true` scores him (RBI to the batter), `false` is a second out at the plate
+    /// (no run), and `nil` means no runner was on third. Can end the half-inning.
+    func finishOutAtFirst(batterLine: GameStatLine, runnerHomeSafe: Bool?) {
+        batterLine.batting.record(.out)                   // the batter, out at first
+        activePitcherLine?.pitching.recordAllowed(.out)   // outsRecorded += 1 for the batter
+
+        // Resolve who's aboard BEFORE moving anyone, then clear and re-place one base up.
+        let onFirst = runnerFirst, onSecond = runnerSecond, onThird = runnerThird
+        runnerFirst = nil; runnerSecond = nil; runnerThird = nil
+
+        var outsOnPlay = 1                                 // the batter
+        if let third = onThird {
+            if runnerHomeSafe == false {
+                outsOnPlay += 1                            // thrown out at home
+            } else if runnerHomeSafe == true {
+                scoreRun(by: third)                        // safe — the run counts, RBI to the batter
+                batterLine.batting.rbi += 1
+            }
+        }
+        if let second = onSecond { setRunner(second, onBase: 2) }   // 2nd → 3rd
+        if let first = onFirst { setRunner(first, onBase: 1) }      // 1st → 2nd
+
+        outs += outsOnPlay
+        if outsOnPlay > 1 { activePitcherLine?.pitching.outsRecorded += 1 }   // the runner (batter's above)
+        if battingIsHome { awayPitcherOuts += outsOnPlay } else { homePitcherOuts += outsOnPlay }
+        advanceBatter()
+        if outs >= settings.outsPerInning && !isComplete { advanceHalfInning() }
+    }
+
     private func scoreRun(by player: Player) {
         if let line = statLines.first(where: { $0.player === player && $0.isHome == battingIsHome }) {
             line.batting.runsScored += 1
@@ -356,6 +465,58 @@ extension Game {
         advanceBatter()
         // End the half-inning if the fielder's-choice out was the last one.
         if outs >= settings.outsPerInning && !isComplete { advanceHalfInning() }
+    }
+
+    // MARK: - Baserunning (drag to steal / advance)
+
+    /// The batting-side stat line for a baserunner, used to credit a stolen base / caught stealing.
+    private func battingLine(for player: Player) -> GameStatLine? {
+        statLines.first { $0.player === player && $0.isHome == battingIsHome }
+    }
+
+    /// Spoken base name for a play-log line ("second", "home").
+    private func spokenBase(_ index: Int) -> String {
+        switch index {
+        case 0:  return "first"
+        case 1:  return "second"
+        case 2:  return "third"
+        default: return "home"
+        }
+    }
+
+    /// A runner dragged to `toBase` and called SAFE. Moves him there — or scores him at home (a run,
+    /// never an RBI) — and applies the reason's credit: a stolen base, or an error charged to the
+    /// fielding team. Returns the play-log line. Assumes `toBase` is empty (or home); the drag UI
+    /// only offers empty forward bases.
+    @discardableResult
+    func recordSafeAdvance(fromBase: Int, toBase: Int, reason: SafeAdvanceReason) -> String {
+        guard let runner = runner(onBase: fromBase) else { return "" }
+        setRunner(nil, onBase: fromBase)
+        if toBase >= 3 {
+            scoreRun(by: runner)          // steal of home / advance home — a run, never an RBI
+        } else {
+            setRunner(runner, onBase: toBase)
+        }
+        if reason.creditsStolenBase { battingLine(for: runner)?.batting.stolenBases += 1 }
+        if reason.chargesError {
+            if battingIsHome { awayErrors += 1 } else { homeErrors += 1 }
+        }
+        return reason.logLine(runner: runner.name, base: spokenBase(toBase))
+    }
+
+    /// A runner dragged toward `toBase` and called OUT. Removes him and records the out — charged to
+    /// the current pitcher, and able to end the half-inning — plus a caught stealing when that's the
+    /// reason. `toBase` is only for the play-log line ("caught stealing at second"). Returns it.
+    @discardableResult
+    func recordBaserunningOut(fromBase: Int, toBase: Int, reason: OutReason) -> String {
+        guard let runner = runner(onBase: fromBase) else { return "" }
+        setRunner(nil, onBase: fromBase)
+        if reason.creditsCaughtStealing { battingLine(for: runner)?.batting.caughtStealing += 1 }
+        outs += 1
+        activePitcherLine?.pitching.outsRecorded += 1
+        if battingIsHome { awayPitcherOuts += 1 } else { homePitcherOuts += 1 }
+        if outs >= settings.outsPerInning && !isComplete { advanceHalfInning() }
+        return reason.logLine(runner: runner.name, base: spokenBase(toBase))
     }
 
     /// Manually score the runner on `baseIndex` (they advanced home on their own — e.g. from 1st on
@@ -422,6 +583,7 @@ extension Game {
         outcome: PlateAppearanceOutcome? = nil,
         battedBallType: BattedBallType? = nil,
         fieldPosition: FieldPosition? = nil,
+        battedOutType: BattedOutType? = nil,
         batter: Player? = nil,
         pitcher: Player? = nil,
         detail: String = "",
@@ -441,6 +603,7 @@ extension Game {
             outcome: outcome,
             battedBallType: battedBallType,
             fieldPosition: fieldPosition,
+            battedOutType: battedOutType,
             batter: batter,
             pitcher: pitcher,
             detail: detail,

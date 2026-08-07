@@ -17,11 +17,16 @@ struct GameTeamView: View {
     @Bindable var game: Game
     /// Which side this screen is showing.
     let isHome: Bool
+    @State private var showSubstitution = false
 
     private var team: Team? { isHome ? game.homeTeam : game.awayTeam }
 
     /// The batting order in use, in order — reflects substitutions.
     private var lineup: [GameStatLine] { game.lineup(isHome: isHome) }
+
+    /// The team's own batters (reorderable). The shared DH always bats last and isn't reordered.
+    private var teamBatters: [GameStatLine] { game.teamLineup(isHome: isHome) }
+    private var dhLine: GameStatLine? { lineup.first { $0.isDH } }
 
     /// Players on the team who aren't in the batting order (bench, or subbed out).
     private var bench: [Player] {
@@ -56,29 +61,24 @@ struct GameTeamView: View {
             .blitzCardRow()
 
             Section {
-                if lineup.isEmpty {
+                if teamBatters.isEmpty {
                     Text("No batting order set.").foregroundStyle(.white.opacity(0.6))
                 } else {
-                    ForEach(Array(lineup.enumerated()), id: \.element.persistentModelID) { index, line in
-                        HStack {
-                            Text("\(index + 1).")
-                                .foregroundStyle(.white.opacity(0.5)).monospacedDigit()
-                            Text(line.player?.name ?? "—").foregroundStyle(.white)
-                            if line.player === game.currentBatterLine?.player {
-                                Text("at bat")
-                                    .font(.caption2).foregroundStyle(.black)
-                                    .padding(.horizontal, 6).padding(.vertical, 1)
-                                    .background(.yellow, in: Capsule())
-                            }
-                            Spacer()
-                            if let number = line.player?.jerseyNumber {
-                                Text("#\(number)").foregroundStyle(.white.opacity(0.6))
-                            }
-                        }
+                    ForEach(teamBatters) { line in
+                        batterRow(line, position: (teamBatters.firstIndex { $0 === line } ?? 0) + 1)
                     }
+                    .onMove(perform: moveBatters)
+                }
+                // The shared DH bats last and isn't part of the reorder.
+                if let dhLine {
+                    batterRow(dhLine, position: teamBatters.count + 1)
                 }
             } header: {
                 Text("Batting Order").foregroundStyle(.white)
+            } footer: {
+                Text("Tap Edit, then drag to reorder. The batting spot stays put — whoever you move "
+                     + "into it hits next.")
+                    .foregroundStyle(.white.opacity(0.55))
             }
             .blitzCardRow()
 
@@ -109,16 +109,54 @@ struct GameTeamView: View {
                     } label: {
                         Label("Edit Roster", systemImage: "square.and.pencil")
                     }
+                    Button {
+                        showSubstitution = true
+                    } label: {
+                        Label("Substitute Player", systemImage: "arrow.left.arrow.right")
+                    }
                 } footer: {
-                    Text("Adding or removing players changes the team everywhere. To swap someone "
-                         + "mid-game, use Substitute Player from the game menu.")
+                    Text("Edit Roster changes the team everywhere. Substitute Player swaps someone in "
+                         + "or out of the batting order for this game only.")
                         .foregroundStyle(.white.opacity(0.55))
                 }
                 .blitzCardRow()
             }
         }
+        .sheet(isPresented: $showSubstitution) {
+            SubstitutionView(game: game)
+        }
         .blitzListStyle()
         .navigationTitle(team?.name ?? (isHome ? "Home" : "Away"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { EditButton() }
+    }
+
+    /// One batting-order row: spot number, name, the "at bat" badge, and jersey number.
+    private func batterRow(_ line: GameStatLine, position: Int) -> some View {
+        HStack {
+            Text("\(position).")
+                .foregroundStyle(.white.opacity(0.5)).monospacedDigit()
+            Text(line.player?.name ?? "—").foregroundStyle(.white)
+            if line.player === game.currentBatterLine?.player {
+                Text("at bat")
+                    .font(.caption2).foregroundStyle(.black)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(.yellow, in: Capsule())
+            }
+            Spacer()
+            if let number = line.player?.jerseyNumber {
+                Text("#\(number)").foregroundStyle(.white.opacity(0.6))
+            }
+        }
+    }
+
+    /// Reorder the team's batters and rewrite each line's `battingOrder`. The current-batter pointer
+    /// is a fixed slot, so whoever lands in that spot bats next (no pointer follow, by design).
+    private func moveBatters(from source: IndexSet, to destination: Int) {
+        var ordered = teamBatters
+        ordered.move(fromOffsets: source, toOffset: destination)
+        for (index, line) in ordered.enumerated() {
+            line.battingOrder = index
+        }
     }
 }
