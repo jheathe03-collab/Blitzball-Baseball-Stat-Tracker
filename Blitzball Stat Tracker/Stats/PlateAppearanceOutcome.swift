@@ -268,9 +268,9 @@ extension BattingStats {
         case .reachedOnError, .reachedOnTwoBaseError, .reachedOnThreeBaseError:
             reachedOnError += 1
 
-        // Fielder's choice: an at-bat, no hit, no error charged to anyone.
+        // Fielder's choice: an at-bat, no hit, no error charged to anyone — we just tally it.
         case .fieldersChoice, .fieldersChoiceToSecond, .fieldersChoiceToThird:
-            break
+            fieldersChoices += 1
 
         // The hybrids credit ONLY the hit the batter earned. Note that a batter standing on second
         // after "Single + 2nd on Error" gets a single, NOT a double — crediting the double is the
@@ -287,6 +287,7 @@ extension PitchingStats {
     /// Apply one plate-appearance outcome to the pitcher's line (the defense's side of the same
     /// event). (Runs allowed are handled separately, alongside the batting-team run entry.)
     public mutating func recordAllowed(_ outcome: PlateAppearanceOutcome) {
+        battersFaced += 1   // every completed plate appearance is one batter faced (BF)
         if outcome.isAtBat { atBatsAgainst += 1 }
         if outcome.isOut { outsRecorded += 1 }
         switch outcome {
@@ -295,7 +296,8 @@ extension PitchingStats {
         case .walk:                     walksAllowed += 1
         case .strikeout:                strikeouts += 1
         case .strikeoutLooking:         strikeouts += 1; strikeoutsLooking += 1
-        case .out, .hitByPitch:         break
+        case .out:                      break
+        case .hitByPitch:               hitBatters += 1   // one pitch, counts toward Total Pitches
         // Sac fly: the out is tallied by the shared `if outcome.isOut` above, and it's not an
         // at-bat against the pitcher. No hit; the run allowed is charged by the scoring code.
         case .sacrificeFly:             break

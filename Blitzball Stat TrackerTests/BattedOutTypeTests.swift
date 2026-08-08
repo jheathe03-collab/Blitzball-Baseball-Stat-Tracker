@@ -12,7 +12,7 @@ import Testing
 struct BattedOutTypeTests {
 
     @Test func eachContactTypeOffersItsOwnOutKinds() {
-        #expect(BattedBallType.groundBall.outTypeOptions == [.groundOut])
+        #expect(BattedBallType.groundBall.outTypeOptions == [.outAtFirst])
         #expect(BattedBallType.lineDrive.outTypeOptions == [.lineOut, .lineOutFoul])
         #expect(BattedBallType.flyBall.outTypeOptions == [.flyOut, .flyOutFoul])
         #expect(BattedBallType.popFly.outTypeOptions == [.popOut, .popOutFoul])

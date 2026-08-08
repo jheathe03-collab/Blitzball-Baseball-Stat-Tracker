@@ -91,7 +91,7 @@ struct ContactTypeSheet: View {
                         Button(role: .destructive) {
                             isOut = true
                         } label: {
-                            Label("Actually an Out", systemImage: "hand.raised.fill")
+                            Label("Out", systemImage: "baseball.circle")
                         }
                     } footer: {
                         Text("Records an out instead of a \(sourceOutcome.playLabel.lowercased()). "

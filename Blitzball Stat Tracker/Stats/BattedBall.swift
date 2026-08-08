@@ -45,7 +45,10 @@ public enum BattedBallType: String, CaseIterable, Codable, Sendable {
     /// has a single option, so its choice is auto-selected (no extra tap).
     public var outTypeOptions: [BattedOutType] {
         switch self {
-        case .groundBall: return [.groundOut]
+        // A ground-ball out IS an out at first: the batter's out and the runners move up a base
+        // (a runner coming home is resolved Safe/Out). Shown as "Ground Out". The plain `.groundOut`
+        // where runners hold is retired — kept in the enum only so old logged plays still read.
+        case .groundBall: return [.outAtFirst]
         case .lineDrive:  return [.lineOut, .lineOutFoul]
         case .flyBall:    return [.flyOut, .flyOutFoul]
         case .popFly:     return [.popOut, .popOutFoul]
@@ -89,7 +92,7 @@ public enum BattedOutType: String, CaseIterable, Codable, Sendable {
         case .popOut:         return "Pop Out"
         case .popOutFoul:     return "Pop Out (Foul)"
         case .buntOutAtFirst: return "Out at 1st"
-        case .outAtFirst:     return "Out at 1st"
+        case .outAtFirst:     return "Ground Out"
         case .doublePlay:     return "Double Play"
         case .triplePlay:     return "Triple Play"
         }

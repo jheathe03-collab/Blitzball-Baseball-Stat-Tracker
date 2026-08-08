@@ -63,6 +63,9 @@ public enum OutReason: String, CaseIterable, Codable, Sendable {
     /// Credits the runner a caught stealing.
     public var creditsCaughtStealing: Bool { self == .caughtStealing }
 
+    /// Credits the runner a "picked off" (retired off the base, not on a steal).
+    public var creditsPickedOff: Bool { self == .pickedOff }
+
     /// The play-log line, e.g. "Sam caught stealing at second." `base` is the spoken base name.
     public func logLine(runner: String, base: String) -> String {
         switch self {

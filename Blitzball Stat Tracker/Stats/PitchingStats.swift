@@ -30,6 +30,24 @@ public struct PitchingStats: Codable, Hashable, Sendable {
     public var strikeoutsLooking: Int
     /// At-bats against (used for Batting Average Against).
     public var atBatsAgainst: Int
+    /// Batters faced — every plate appearance completed against this pitcher (BF). Always ≥ at-bats
+    /// against, since it also counts walks, HBP, and sacrifices.
+    public var battersFaced: Int
+    /// Stolen bases allowed while this pitcher was on the mound (SB).
+    public var stolenBasesAllowed: Int
+    /// Runners caught stealing while this pitcher was on the mound (CS).
+    public var caughtStealing: Int
+    /// Runners picked off while this pitcher was on the mound (PIK).
+    public var pickoffs: Int
+    /// Wild pitches charged to this pitcher (WP).
+    public var wildPitches: Int
+    /// Total strikes thrown (TS) — called/swinging strikes, fouls, and balls put in play. Only
+    /// accrues when Record Balls and Strikes is on; 0 otherwise.
+    public var totalStrikes: Int
+    /// Total balls thrown (TB). Only accrues when Record Balls and Strikes is on; 0 otherwise.
+    public var totalBalls: Int
+    /// Batters hit by a pitch (HBP allowed). Each is one pitch, so it feeds Total Pitches.
+    public var hitBatters: Int
     /// Saves recorded. A counting stat we track and total (not used by ERA/WHIP/etc.).
     public var saves: Int
     /// Quality starts (6+ IP with 3 or fewer earned runs). A counting stat we track and total.
@@ -47,6 +65,14 @@ public struct PitchingStats: Codable, Hashable, Sendable {
         strikeouts: Int = 0,
         strikeoutsLooking: Int = 0,
         atBatsAgainst: Int = 0,
+        battersFaced: Int = 0,
+        stolenBasesAllowed: Int = 0,
+        caughtStealing: Int = 0,
+        pickoffs: Int = 0,
+        wildPitches: Int = 0,
+        totalStrikes: Int = 0,
+        totalBalls: Int = 0,
+        hitBatters: Int = 0,
         saves: Int = 0,
         qualityStarts: Int = 0,
         blownSaves: Int = 0
@@ -60,6 +86,14 @@ public struct PitchingStats: Codable, Hashable, Sendable {
         self.strikeouts = strikeouts
         self.strikeoutsLooking = strikeoutsLooking
         self.atBatsAgainst = atBatsAgainst
+        self.battersFaced = battersFaced
+        self.stolenBasesAllowed = stolenBasesAllowed
+        self.caughtStealing = caughtStealing
+        self.pickoffs = pickoffs
+        self.wildPitches = wildPitches
+        self.totalStrikes = totalStrikes
+        self.totalBalls = totalBalls
+        self.hitBatters = hitBatters
         self.saves = saves
         self.qualityStarts = qualityStarts
         self.blownSaves = blownSaves
@@ -70,6 +104,13 @@ public struct PitchingStats: Codable, Hashable, Sendable {
     /// Innings pitched as a true number (e.g. 16 outs == 5.333… innings).
     public var inningsPitched: Double {
         Double(outsRecorded) / 3.0
+    }
+
+    /// Total pitches thrown (#P): every ball and strike, plus each hit-by-pitch (a pitch that's
+    /// neither a ball nor a strike). Only meaningful when Record Balls and Strikes is on, since TS/TB
+    /// only accrue then.
+    public var totalPitches: Int {
+        totalStrikes + totalBalls + hitBatters
     }
 
     // MARK: - Computed rate stats
@@ -115,6 +156,14 @@ extension PitchingStats {
             strikeouts: lhs.strikeouts + rhs.strikeouts,
             strikeoutsLooking: lhs.strikeoutsLooking + rhs.strikeoutsLooking,
             atBatsAgainst: lhs.atBatsAgainst + rhs.atBatsAgainst,
+            battersFaced: lhs.battersFaced + rhs.battersFaced,
+            stolenBasesAllowed: lhs.stolenBasesAllowed + rhs.stolenBasesAllowed,
+            caughtStealing: lhs.caughtStealing + rhs.caughtStealing,
+            pickoffs: lhs.pickoffs + rhs.pickoffs,
+            wildPitches: lhs.wildPitches + rhs.wildPitches,
+            totalStrikes: lhs.totalStrikes + rhs.totalStrikes,
+            totalBalls: lhs.totalBalls + rhs.totalBalls,
+            hitBatters: lhs.hitBatters + rhs.hitBatters,
             saves: lhs.saves + rhs.saves,
             qualityStarts: lhs.qualityStarts + rhs.qualityStarts,
             blownSaves: lhs.blownSaves + rhs.blownSaves
@@ -135,6 +184,14 @@ extension PitchingStats {
             strikeouts: max(0, lhs.strikeouts - rhs.strikeouts),
             strikeoutsLooking: max(0, lhs.strikeoutsLooking - rhs.strikeoutsLooking),
             atBatsAgainst: max(0, lhs.atBatsAgainst - rhs.atBatsAgainst),
+            battersFaced: max(0, lhs.battersFaced - rhs.battersFaced),
+            stolenBasesAllowed: max(0, lhs.stolenBasesAllowed - rhs.stolenBasesAllowed),
+            caughtStealing: max(0, lhs.caughtStealing - rhs.caughtStealing),
+            pickoffs: max(0, lhs.pickoffs - rhs.pickoffs),
+            wildPitches: max(0, lhs.wildPitches - rhs.wildPitches),
+            totalStrikes: max(0, lhs.totalStrikes - rhs.totalStrikes),
+            totalBalls: max(0, lhs.totalBalls - rhs.totalBalls),
+            hitBatters: max(0, lhs.hitBatters - rhs.hitBatters),
             saves: max(0, lhs.saves - rhs.saves),
             qualityStarts: max(0, lhs.qualityStarts - rhs.qualityStarts),
             blownSaves: max(0, lhs.blownSaves - rhs.blownSaves)
@@ -151,6 +208,8 @@ extension PitchingStats {
     private enum CodingKeys: String, CodingKey {
         case outsRecorded, earnedRuns, runsAllowed, hitsAllowed, homeRunsAllowed
         case walksAllowed, strikeouts, strikeoutsLooking, atBatsAgainst, saves, qualityStarts, blownSaves
+        case battersFaced, stolenBasesAllowed, caughtStealing, pickoffs, wildPitches
+        case totalStrikes, totalBalls, hitBatters
     }
 
     public init(from decoder: Decoder) throws {
@@ -164,6 +223,14 @@ extension PitchingStats {
         strikeouts = try c.decodeIfPresent(Int.self, forKey: .strikeouts) ?? 0
         strikeoutsLooking = try c.decodeIfPresent(Int.self, forKey: .strikeoutsLooking) ?? 0
         atBatsAgainst = try c.decodeIfPresent(Int.self, forKey: .atBatsAgainst) ?? 0
+        battersFaced = try c.decodeIfPresent(Int.self, forKey: .battersFaced) ?? 0
+        stolenBasesAllowed = try c.decodeIfPresent(Int.self, forKey: .stolenBasesAllowed) ?? 0
+        caughtStealing = try c.decodeIfPresent(Int.self, forKey: .caughtStealing) ?? 0
+        pickoffs = try c.decodeIfPresent(Int.self, forKey: .pickoffs) ?? 0
+        wildPitches = try c.decodeIfPresent(Int.self, forKey: .wildPitches) ?? 0
+        totalStrikes = try c.decodeIfPresent(Int.self, forKey: .totalStrikes) ?? 0
+        totalBalls = try c.decodeIfPresent(Int.self, forKey: .totalBalls) ?? 0
+        hitBatters = try c.decodeIfPresent(Int.self, forKey: .hitBatters) ?? 0
         saves = try c.decodeIfPresent(Int.self, forKey: .saves) ?? 0
         qualityStarts = try c.decodeIfPresent(Int.self, forKey: .qualityStarts) ?? 0
         blownSaves = try c.decodeIfPresent(Int.self, forKey: .blownSaves) ?? 0

@@ -145,8 +145,11 @@ struct PlayerDetailView: View {
             StatCell(label: "K", value: String(batting.strikeouts))
             StatCell(label: "Kʟ", value: String(batting.strikeoutsLooking))
             StatCell(label: "HBP", value: String(batting.hitByPitch))
+            StatCell(label: "ROE", value: String(batting.reachedOnError))
+            StatCell(label: "FC", value: String(batting.fieldersChoices))
             StatCell(label: "SB", value: String(batting.stolenBases))
             StatCell(label: "CS", value: String(batting.caughtStealing))
+            StatCell(label: "PIK", value: String(batting.pickedOff))
         }
         .blitzCardRow()
     }

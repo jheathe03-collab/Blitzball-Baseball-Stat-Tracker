@@ -187,7 +187,9 @@ struct BattingBox: View {
     let lines: [GameStatLine]
     var showTotals: Bool = true
 
-    private let headers = ["AB", "R", "H", "RBI", "BB", "K", "SB", "CS", "AVG", "OPS"]
+    private let headers = ["PA", "AB", "R", "H", "1B", "2B", "3B", "HR", "RBI", "BB",
+                           "K", "Kʟ", "HBP", "ROE", "FC", "SB", "CS", "PIK",
+                           "AVG", "OBP", "SLG", "OPS"]
 
     var body: some View {
         // Decode each line's batting blob ONCE per render, then use the cached values for BOTH
@@ -220,15 +222,27 @@ struct BattingBox: View {
     private func row(name: String, b: BattingStats, bold: Bool) -> some View {
         GridRow {
             Text(name).bold(bold).lineLimit(1)
+            Text("\(b.plateAppearances)")
             Text("\(b.atBats)")
             Text("\(b.runsScored)")
             Text("\(b.hits)")
+            Text("\(b.singles)")
+            Text("\(b.doubles)")
+            Text("\(b.triples)")
+            Text("\(b.homeRuns)")
             Text("\(b.rbi)")
             Text("\(b.walks)")
             Text("\(b.strikeouts)")
+            Text("\(b.strikeoutsLooking)")
+            Text("\(b.hitByPitch)")
+            Text("\(b.reachedOnError)")
+            Text("\(b.fieldersChoices)")
             Text("\(b.stolenBases)")
             Text("\(b.caughtStealing)")
+            Text("\(b.pickedOff)")
             Text(StatFormat.rate(b.battingAverage))
+            Text(StatFormat.rate(b.onBasePercentage))
+            Text(StatFormat.rate(b.sluggingPercentage))
             Text(StatFormat.rate(b.onBasePlusSlugging))
         }
         .fontWeight(bold ? .bold : .regular)
@@ -241,7 +255,8 @@ struct PitchingBox: View {
     let lines: [GameStatLine]
     var showTotals: Bool = true
 
-    private let headers = ["IP", "H", "R", "ER", "BB", "K", "Kʟ", "HR", "ERA"]
+    private let headers = ["IP", "BF", "H", "R", "ER", "BB", "K", "Kʟ", "HR", "WP",
+                           "SB", "CS", "PIK", "#P", "TB", "TS", "ERA", "WHIP", "BAA"]
 
     var body: some View {
         // Same one-decode-per-line strategy as BattingBox — see the note there.
@@ -273,6 +288,7 @@ struct PitchingBox: View {
         GridRow {
             Text(name).bold(bold).lineLimit(1)
             Text(StatFormat.inningsPitched(outs: p.outsRecorded))
+            Text("\(p.battersFaced)")
             Text("\(p.hitsAllowed)")
             Text("\(p.runsAllowed)")
             Text("\(p.earnedRuns)")
@@ -280,7 +296,16 @@ struct PitchingBox: View {
             Text("\(p.strikeouts)")
             Text("\(p.strikeoutsLooking)")
             Text("\(p.homeRunsAllowed)")
+            Text("\(p.wildPitches)")
+            Text("\(p.stolenBasesAllowed)")
+            Text("\(p.caughtStealing)")
+            Text("\(p.pickoffs)")
+            Text("\(p.totalPitches)")
+            Text("\(p.totalBalls)")
+            Text("\(p.totalStrikes)")
             Text(StatFormat.ratio(p.earnedRunAverage))
+            Text(StatFormat.ratio(p.walksAndHitsPerInning))
+            Text(StatFormat.rate(p.battingAverageAgainst))
         }
         .fontWeight(bold ? .bold : .regular)
     }

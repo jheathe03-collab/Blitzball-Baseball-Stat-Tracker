@@ -331,6 +331,7 @@ extension Game {
         batter.batting.record(.strikeout)                     // K + at-bat for the batter
         activePitcherLine?.pitching.recordAllowed(.strikeout) // K + at-bat-against, but this also…
         activePitcherLine?.pitching.outsRecorded -= 1         // …counted an out that never happened — undo it
+        if wildPitch { activePitcherLine?.pitching.wildPitches += 1 }   // charged a WP when the ball got away
         applyAdvance(BaseRunning.advanceOnWalk(bases: runnerTokens, batter: 3),
                      batter: batter, batterPlayer: batterPlayer)   // batter to first, force runners ahead
         advanceBatter()                                       // no out, so no half-inning check needed
@@ -525,7 +526,10 @@ extension Game {
         } else {
             setRunner(runner, onBase: toBase)
         }
-        if reason.creditsStolenBase { battingLine(for: runner)?.batting.stolenBases += 1 }
+        if reason.creditsStolenBase {
+            battingLine(for: runner)?.batting.stolenBases += 1
+            activePitcherLine?.pitching.stolenBasesAllowed += 1   // charged to the pitcher on the mound
+        }
         if reason.chargesError {
             if battingIsHome { awayErrors += 1 } else { homeErrors += 1 }
         }
@@ -539,7 +543,14 @@ extension Game {
     func recordBaserunningOut(fromBase: Int, toBase: Int, reason: OutReason) -> String {
         guard let runner = runner(onBase: fromBase) else { return "" }
         setRunner(nil, onBase: fromBase)
-        if reason.creditsCaughtStealing { battingLine(for: runner)?.batting.caughtStealing += 1 }
+        if reason.creditsCaughtStealing {
+            battingLine(for: runner)?.batting.caughtStealing += 1
+            activePitcherLine?.pitching.caughtStealing += 1   // the battery's caught stealing
+        }
+        if reason.creditsPickedOff {
+            battingLine(for: runner)?.batting.pickedOff += 1
+            activePitcherLine?.pitching.pickoffs += 1
+        }
         outs += 1
         activePitcherLine?.pitching.outsRecorded += 1
         if battingIsHome { awayPitcherOuts += 1 } else { homePitcherOuts += 1 }

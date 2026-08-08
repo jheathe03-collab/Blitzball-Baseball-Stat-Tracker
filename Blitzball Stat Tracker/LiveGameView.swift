@@ -25,8 +25,10 @@ struct LiveGameView: View {
     @State private var showPitcherPicker = false
     @State private var editingBase: BaseSelection?
 
-    // In-memory Undo history: a snapshot is pushed before each play, capped to the last 100.
-    @State private var undoStack: [GameSnapshot] = []
+    // In-memory Undo history: a step is pushed before each play AND each pitch, capped to the last 100.
+    // Each step pairs the game snapshot with the live ball/strike count, since the count is view state
+    // (not part of the game) — so Undo can walk back through the count, not just completed plays.
+    @State private var undoStack: [UndoStep] = []
     // A blocked pitcher change (All-Team-Pitch), held to offer an injury override.
     @State private var pitcherChangeError: String?
     @State private var pendingPitcher: Player?
@@ -51,9 +53,9 @@ struct LiveGameView: View {
     // Which tab of the live screen is showing.
     @State private var liveTab: LiveTab = .scoring
     // Undone actions, so they can be re-applied. Cleared the moment a new play is recorded.
-    @State private var redoStack: [GameSnapshot] = []
-    // Placeholder pitch count — tappable, wraps at the rule limit, cleared each plate
-    // appearance. Nothing here feeds the stat lines yet.
+    @State private var redoStack: [UndoStep] = []
+    // The live ball/strike count for the current plate appearance. Tappable to adjust; cleared when the
+    // PA ends (in finishPlay). Each pitch commits to the pitcher's line live (see applyPitch).
     @State private var balls = 0
     @State private var strikes = 0
     // Pitch-by-pitch tracking (Record Balls and Strikes): the Pitch menu, its Dropped-3rd sub-menu, and
@@ -381,10 +383,11 @@ struct LiveGameView: View {
             HStack(spacing: 8) {
                 if game.settings.recordBallsAndStrikes {
                     // With pitch tracking on, the K/Kl/Out slots become the most-used pitch calls.
+                    // Foul Ball takes the fourth slot (far more common than HBP, which moves under Pitch).
                     pitchShortcutCard("Swing & Miss", icon: "figure.baseball", call: .swingingStrike)
                     pitchShortcutCard("Called Strike", icon: "hand.raised.fill", call: .calledStrike)
                     pitchShortcutCard("Ball", icon: "baseball.fill", call: .ball)
-                    if game.settings.hbpWalks { padCard(.hitByPitch) }
+                    pitchShortcutCard("Foul Ball", icon: "figure.baseball.circle", call: .foul)
                     pitchCard
                 } else {
                     ForEach(cardRowTwo, id: \.self) { padCard($0) }
@@ -538,12 +541,22 @@ struct LiveGameView: View {
                         Label("Ball In Play", systemImage: "figure.baseball")
                     }
                 }
-                // Swing & Miss / Called Strike / Ball live on the pad now; the sheet keeps the rest.
+                // Swing & Miss / Called Strike / Ball / Foul Ball live on the pad now; the sheet keeps the rest.
                 Section("Pitch") {
-                    pitchSheetRow("Foul Ball") { choosePitch(pitchAction(.foul)) }
                     pitchSheetRow("Intentional Walk") { choosePitch { recordOutcome(.walk) } }
+                    // HBP is uncommon, so it lives here rather than on the pad — only when it's in play.
+                    if game.settings.hbpWalks {
+                        pitchSheetRow("Hit By Pitch") { choosePitch { recordOutcome(.hitByPitch) } }
+                    }
                     if inTwoStrikeZone {
-                        pitchSheetRow("Foul Tip Out") { choosePitch { recordOutcome(.strikeout) } }
+                        // The foul-tip strike three comes from the menu, not applyPitch — count it.
+                        // The foul-tip strike three is a pitch from the menu (not applyPitch): snapshot,
+                        // credit that strike, then fold the strikeout into this same Undo step.
+                        pitchSheetRow("Foul Tip Out") { choosePitch {
+                            pushUndo()
+                            if game.settings.recordBallsAndStrikes { game.activePitcherLine?.pitching.totalStrikes += 1 }
+                            recordOutcome(.strikeout, pushesUndo: false)
+                        } }
                         pitchSheetRow("Dropped 3rd Strike") { choosePitch { showDroppedThird = true } }
                     }
                     pitchSheetRow("Batter Out (Other)") { choosePitch { recordOutcome(.out) } }
@@ -611,9 +624,25 @@ struct LiveGameView: View {
         Binding(get: { pendingPitchType != nil }, set: { if !$0 { pendingPitchType = nil } })
     }
 
-    /// Apply a count pitch: bump the count (a foul advances only up to the brink), log it with its type
-    /// when we have one, then record the terminal outcome once the count fills.
+    /// Apply a count pitch: snapshot for Undo, commit the pitch to the pitcher LIVE (so the box score
+    /// updates as it's thrown), bump the count, log it, then record the terminal outcome once the count
+    /// fills. Each pitch is its own Undo step; a terminal pitch folds its strikeout/walk into that same
+    /// step (so Undo of a strikeout lands right before strike three, not at 0-0).
     private func applyPitch(_ call: PitchCall, type: PitchType?) {
+        // Does this pitch end the plate appearance?
+        let isStrike = call == .calledStrike || call == .swingingStrike
+        let endsInStrikeout = isStrike && strikes + 1 >= game.settings.maxStrikes
+        let endsInWalk = call == .ball && balls + 1 >= game.settings.maxBalls
+
+        pushUndo()   // one Undo step per pitch; a terminal pitch also covers the K/BB it triggers
+
+        // Credit the pitch to the pitcher on the mound right now (mid-PA the pitcher can't change).
+        switch call {
+        case .calledStrike, .swingingStrike, .foul: game.activePitcherLine?.pitching.totalStrikes += 1
+        case .ball:                                 game.activePitcherLine?.pitching.totalBalls += 1
+        }
+
+        // Advance the count (a foul only advances up to the brink).
         switch call {
         case .calledStrike, .swingingStrike: strikes += 1
         case .ball:                          balls += 1
@@ -623,27 +652,28 @@ struct LiveGameView: View {
             game.logPlay(.pitch, detail: "\(type.label) — \(call.logLabel) (\(balls)-\(strikes))",
                          context: modelContext)
         }
-        switch call {
-        case .calledStrike:   if strikes >= game.settings.maxStrikes {
-            recordOutcome(.strikeoutLooking, strikeoutPitch: type?.label)
-        }
-        case .swingingStrike: if strikes >= game.settings.maxStrikes {
-            recordOutcome(.strikeout, strikeoutPitch: type?.label)
-        }
-        case .ball:           if balls >= game.settings.maxBalls { recordOutcome(.walk) }
-        case .foul:           break
+        // The terminal outcome reuses THIS pitch's Undo step (pushesUndo: false).
+        if endsInStrikeout {
+            recordOutcome(call == .calledStrike ? .strikeoutLooking : .strikeout,
+                          strikeoutPitch: type?.label, pushesUndo: false)
+        } else if endsInWalk {
+            recordOutcome(.walk, pushesUndo: false)
         }
     }
 
     /// Dropped third strike where the batter reached first — a strikeout with no out, batter safe at
     /// first (forcing runners like a walk). Logged as a strikeout plus a note on how he reached.
     private func droppedThirdStrikeReached(wildPitch: Bool) {
-        balls = 0; strikes = 0
         let batter = game.currentBatterLine?.player
         let inning = game.currentInning, isTop = game.isTopInning, outs = game.outs
         let runsBefore = game.homeScore + game.awayScore
         perform {
             game.recordDroppedThirdStrike(wildPitch: wildPitch)
+            // The dropped strike-three came from the menu, not applyPitch, so credit that one pitch
+            // now (a strike). No out is made, so the active pitcher is still the one who threw it.
+            if game.settings.recordBallsAndStrikes {
+                game.activePitcherLine?.pitching.totalStrikes += 1
+            }
             let runs = max(0, (game.homeScore + game.awayScore) - runsBefore)
             game.logPlay(.plateAppearance, outcome: .strikeout, batter: batter, pitcher: game.activePitcher,
                          runsScored: runs, inning: inning, isTop: isTop, outs: outs, context: modelContext)
@@ -652,6 +682,7 @@ struct LiveGameView: View {
             game.logPlay(.baserunning, batter: batter, pitcher: game.activePitcher,
                          detail: note, context: modelContext)
         }
+        balls = 0; strikes = 0   // PA over; done after `perform` so its Undo snapshot kept the count
     }
 
     private func circleButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
@@ -960,7 +991,6 @@ struct LiveGameView: View {
     /// draft in `finishPlay`.
     private func resolveFieldersChoice(outcome: PlateAppearanceOutcome, fieldPosition: FieldPosition?,
                                        playedOnBase: Int?, out: Bool) {
-        balls = 0; strikes = 0
         pendingPlay = PlayDraft(outcome: outcome,
                                 fieldPosition: fieldPosition,
                                 batter: game.currentBatterLine?.player,
@@ -1034,13 +1064,17 @@ struct LiveGameView: View {
                                          type: BattedBallType?, position: FieldPosition) {
         if outcome == .out, let type {
             var options = type.outTypeOptions
-            // A ground ball with a runner on can instead be an "out at first" that advances the runners.
-            if type == .groundBall && !runnersOnBase.isEmpty { options.append(.outAtFirst) }
             if canDoublePlay { options.append(.doublePlay) }
             if canTriplePlay { options.append(.triplePlay) }
             if options.count <= 1 {
-                recordOutcome(.out, battedBallType: type, fieldPosition: position,
-                              battedOutType: options.first)
+                let only = options.first
+                // The out-at-first kinds (a Ground Out, or a bunt out) advance the runners, so they
+                // run the trot/finalize path even when they're the only option — not a plain record.
+                if only == .outAtFirst || only == .buntOutAtFirst {
+                    startOutAtFirst(type: type, position: position, outType: only!)
+                } else {
+                    recordOutcome(.out, battedBallType: type, fieldPosition: position, battedOutType: only)
+                }
             } else {
                 pendingOutType = PendingOutType(type: type, position: position, options: options)
             }
@@ -1080,7 +1114,6 @@ struct LiveGameView: View {
     /// one Undo once the trot finishes.
     private func startTriplePlay(type: BattedBallType, position: FieldPosition) {
         guard let batterLine = game.currentBatterLine, let batter = batterLine.player else { return }
-        balls = 0; strikes = 0
         animatingTriplePlay = true
         animatingPlay = true                    // block the pad while the trot plays out
         let draft = PlayDraft(outcome: .out, battedBallType: type, fieldPosition: position,
@@ -1122,7 +1155,6 @@ struct LiveGameView: View {
         let runners = runnersOnBase.sorted { $0.index > $1.index }   // lead (highest base) first
         guard runners.count >= 2, let batterLine = game.currentBatterLine,
               let batter = batterLine.player else { return }
-        balls = 0; strikes = 0
         animatingPlay = true                    // block the pad while the play develops
         let draft = PlayDraft(outcome: .out, battedBallType: type, fieldPosition: position,
                               battedOutType: .doublePlay, batter: batter, pitcher: game.activePitcher,
@@ -1207,7 +1239,6 @@ struct LiveGameView: View {
             applyDoublePlayImmediate(type: type, position: position, secondOutBase: secondOutBase)
             return
         }
-        balls = 0; strikes = 0
         pushUndo()                              // snapshot the pre-play state for Undo
         game.lastPlayInheritedCharges = []
         animatingPlay = true                    // blocks the pad while the beats play out
@@ -1236,7 +1267,6 @@ struct LiveGameView: View {
 
     /// Record a double play in place (caught-ball, doubled off) and log it — no run to animate.
     private func applyDoublePlayImmediate(type: BattedBallType, position: FieldPosition, secondOutBase: Int) {
-        balls = 0; strikes = 0
         pendingPlay = PlayDraft(outcome: .out,
                                 battedBallType: type,
                                 fieldPosition: position,
@@ -1260,7 +1290,6 @@ struct LiveGameView: View {
     /// single Undo — cancelling snaps the runners back.
     private func startOutAtFirst(type: BattedBallType, position: FieldPosition, outType: BattedOutType) {
         guard let batterLine = game.currentBatterLine, let batter = batterLine.player else { return }
-        balls = 0; strikes = 0
         animatingPlay = true                    // block the pad while the trot plays out
         let draft = PlayDraft(outcome: .out, battedBallType: type, fieldPosition: position,
                               battedOutType: outType, batter: batter, pitcher: game.activePitcher,
@@ -1313,7 +1342,8 @@ struct LiveGameView: View {
                                battedBallType: BattedBallType? = nil,
                                fieldPosition: FieldPosition? = nil,
                                battedOutType: BattedOutType? = nil,
-                               strikeoutPitch: String? = nil) {
+                               strikeoutPitch: String? = nil,
+                               pushesUndo: Bool = true) {
         // A fielder's choice needs the "which runner / safe or out?" prompts before anything is
         // applied, so it takes its own path (the fielder location has already been chosen).
         if outcome.isFieldersChoice {
@@ -1351,12 +1381,13 @@ struct LiveGameView: View {
         guard let baseCount = hitBaseCount(outcome),
               let batter = game.currentBatterLine?.player
         else {
-            balls = 0; strikes = 0   // the plate appearance is over
+            // Count is cleared in finishPlay (the single PA-end drain), so Undo can still restore it.
             pendingPlay = draft
-            perform { game.record(outcome) }
+            // A terminal pitch already snapshotted; reuse that step instead of pushing a second.
+            if pushesUndo { perform { game.record(outcome) } }
+            else { performContinuing { game.record(outcome) } }
             return
         }
-        balls = 0; strikes = 0   // the plate appearance is over
         // One undo snapshot covers the whole play (record + every runner placement/score).
         pushUndo()
         game.lastPlayInheritedCharges = []   // this path resolves outside `perform`
@@ -1369,7 +1400,6 @@ struct LiveGameView: View {
     /// stats up front (one undo snapshot) and then run the trot as a purely visual layer — the chips
     /// are travelers, so the already-cleared bases don't fight the animation.
     private func recordHomeRun(draft: PlayDraft) {
-        balls = 0; strikes = 0
         pushUndo()
         game.lastPlayInheritedCharges = []
         pendingPlay = draft
@@ -1394,7 +1424,6 @@ struct LiveGameView: View {
     /// A sacrifice fly: the batter is out and the runner on third tags and trots home to score. We bank
     /// the run/out up front, then run him home as a purely visual layer (like the home-run trot).
     private func recordSacFly(draft: PlayDraft) {
-        balls = 0; strikes = 0
         pushUndo()
         game.lastPlayInheritedCharges = []
         pendingPlay = draft
@@ -1679,6 +1708,17 @@ struct LiveGameView: View {
         // included. Plays with no draft (base edits, half-inning advances) log at their own sites.
         if let draft = pendingPlay {
             pendingPlay = nil
+            // A ball put in play is itself a strike thrown, but it doesn't come through the pitch
+            // buttons (applyPitch) — so add that one strike here, to the pitcher who threw it
+            // (draft.pitcher — the active pitcher may have flipped teams if this was the third out).
+            if game.settings.recordBallsAndStrikes, draft.outcome.isBattedBall,
+               let line = game.statLines.first(where: { $0.player === draft.pitcher }) {
+                line.pitching.totalStrikes += 1
+            }
+            // The plate appearance is over — clear the count for the next batter. Done HERE (the single
+            // PA-end drain) rather than eagerly, so the Undo step taken before the play still captured
+            // the true count and Undo can restore it.
+            balls = 0; strikes = 0
             let drovein = max(0, (game.homeScore + game.awayScore) - draft.runsBefore)
             game.logPlay(.plateAppearance,
                          outcome: draft.outcome,
@@ -1723,7 +1763,7 @@ struct LiveGameView: View {
     // MARK: - Undo plumbing
 
     private func pushUndo() {
-        undoStack.append(game.snapshot())
+        undoStack.append(UndoStep(snapshot: game.snapshot(), balls: balls, strikes: strikes))
         if undoStack.count > 100 { undoStack.removeFirst(undoStack.count - 100) }
         // Doing something new invalidates the redo trail — you can't redo down a branch you left.
         redoStack.removeAll()
@@ -1738,18 +1778,29 @@ struct LiveGameView: View {
         finishPlay()
     }
 
+    /// Like `perform` but WITHOUT pushing a new Undo step — for a play whose Undo snapshot was already
+    /// taken by the caller. Used when a terminal pitch (strike three / ball four) folds its resulting
+    /// strikeout/walk into the pitch's own single Undo step, so Undo lands just before that pitch.
+    private func performContinuing(_ action: () -> Void) {
+        game.lastPlayInheritedCharges = []
+        action()
+        finishPlay()
+    }
+
     private func undo() {
-        guard let snapshot = undoStack.popLast() else { return }
+        guard let step = undoStack.popLast() else { return }
         // Remember where we were so Redo can come back, then roll the game AND its play log back — the
-        // field animates the runners sliding home for free.
-        redoStack.append(game.snapshot())
-        game.restore(from: snapshot, context: modelContext)
+        // field animates the runners sliding home for free. The count rolls back with it.
+        redoStack.append(UndoStep(snapshot: game.snapshot(), balls: balls, strikes: strikes))
+        game.restore(from: step.snapshot, context: modelContext)
+        balls = step.balls; strikes = step.strikes
     }
 
     private func redo() {
-        guard let snapshot = redoStack.popLast() else { return }
-        undoStack.append(game.snapshot())
-        game.restore(from: snapshot, context: modelContext)
+        guard let step = redoStack.popLast() else { return }
+        undoStack.append(UndoStep(snapshot: game.snapshot(), balls: balls, strikes: strikes))
+        game.restore(from: step.snapshot, context: modelContext)
+        balls = step.balls; strikes = step.strikes
     }
 
     // MARK: - Challenges
@@ -2079,6 +2130,14 @@ private struct HitResolution {
     var runners: [(base: Int, player: Player)]
     var index: Int = 0
     var ahead: Int = 3
+}
+
+/// One entry in the Undo/Redo history: the game snapshot plus the live ball/strike count at that
+/// moment (the count lives in the view, not the game, so it must be captured alongside).
+private struct UndoStep {
+    let snapshot: GameSnapshot
+    let balls: Int
+    let strikes: Int
 }
 
 // Pick who gets the RBI for a manually-scored run — or "No RBI" (wild pitch / error).

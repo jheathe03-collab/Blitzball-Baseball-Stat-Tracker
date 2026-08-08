@@ -47,6 +47,12 @@ public struct BattingStats: Codable, Hashable, Sendable {
     /// Times the batter reached base on a fielding error. An at-bat with no hit, so it already
     /// drags AVG/OBP/SLG down through the shared denominators — this is just the tally.
     public var reachedOnError: Int
+    /// Times the batter reached on a fielder's choice (defense retired another runner instead). An
+    /// at-bat with no hit — like ROE it already pulls the rate stats down; this is just the tally.
+    public var fieldersChoices: Int
+    /// Times this baserunner was picked off (retired off the base, not on a steal attempt). A
+    /// baserunning out with no plate-appearance effect — purely a counting stat for the runner.
+    public var pickedOff: Int
 
     /// A memberwise initializer with sensible defaults, so you can create an empty line with
     /// `BattingStats()` and fill in only what you have.
@@ -66,7 +72,9 @@ public struct BattingStats: Codable, Hashable, Sendable {
         strikeoutsLooking: Int = 0,
         stolenBases: Int = 0,
         caughtStealing: Int = 0,
-        reachedOnError: Int = 0
+        reachedOnError: Int = 0,
+        fieldersChoices: Int = 0,
+        pickedOff: Int = 0
     ) {
         self.plateAppearances = plateAppearances
         self.atBats = atBats
@@ -84,6 +92,8 @@ public struct BattingStats: Codable, Hashable, Sendable {
         self.stolenBases = stolenBases
         self.caughtStealing = caughtStealing
         self.reachedOnError = reachedOnError
+        self.fieldersChoices = fieldersChoices
+        self.pickedOff = pickedOff
     }
 
     // MARK: - Derived building blocks
@@ -154,7 +164,9 @@ extension BattingStats {
             strikeoutsLooking: lhs.strikeoutsLooking + rhs.strikeoutsLooking,
             stolenBases: lhs.stolenBases + rhs.stolenBases,
             caughtStealing: lhs.caughtStealing + rhs.caughtStealing,
-            reachedOnError: lhs.reachedOnError + rhs.reachedOnError
+            reachedOnError: lhs.reachedOnError + rhs.reachedOnError,
+            fieldersChoices: lhs.fieldersChoices + rhs.fieldersChoices,
+            pickedOff: lhs.pickedOff + rhs.pickedOff
         )
     }
 
@@ -178,7 +190,9 @@ extension BattingStats {
             strikeoutsLooking: max(0, lhs.strikeoutsLooking - rhs.strikeoutsLooking),
             stolenBases: max(0, lhs.stolenBases - rhs.stolenBases),
             caughtStealing: max(0, lhs.caughtStealing - rhs.caughtStealing),
-            reachedOnError: max(0, lhs.reachedOnError - rhs.reachedOnError)
+            reachedOnError: max(0, lhs.reachedOnError - rhs.reachedOnError),
+            fieldersChoices: max(0, lhs.fieldersChoices - rhs.fieldersChoices),
+            pickedOff: max(0, lhs.pickedOff - rhs.pickedOff)
         )
     }
 }
@@ -192,7 +206,7 @@ extension BattingStats {
     private enum CodingKeys: String, CodingKey {
         case plateAppearances, atBats, hits, doubles, triples, homeRuns, rbi
         case runsScored, walks, hitByPitch, strikeouts, sacrificeFlies, strikeoutsLooking
-        case stolenBases, caughtStealing, reachedOnError
+        case stolenBases, caughtStealing, reachedOnError, fieldersChoices, pickedOff
     }
 
     public init(from decoder: Decoder) throws {
@@ -213,6 +227,8 @@ extension BattingStats {
         stolenBases = try c.decodeIfPresent(Int.self, forKey: .stolenBases) ?? 0
         caughtStealing = try c.decodeIfPresent(Int.self, forKey: .caughtStealing) ?? 0
         reachedOnError = try c.decodeIfPresent(Int.self, forKey: .reachedOnError) ?? 0
+        fieldersChoices = try c.decodeIfPresent(Int.self, forKey: .fieldersChoices) ?? 0
+        pickedOff = try c.decodeIfPresent(Int.self, forKey: .pickedOff) ?? 0
     }
 }
 
