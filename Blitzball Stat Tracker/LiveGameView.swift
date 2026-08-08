@@ -373,8 +373,13 @@ struct LiveGameView: View {
             }
             HStack(spacing: 10) {
                 Spacer()
-                actionPill("Run", tint: .green, textColor: .black,
-                           enabled: !runnersOnBase.isEmpty) { startScoringRun() }
+                // Manual scoring is only for ghost-runners-OFF games. With ghost runners ON, hits
+                // auto-advance and auto-score forced runners, so a manual Run here would double-count
+                // (restored guard — the rebuild had dropped it and left the pill visible in both modes).
+                if !game.settings.ghostRunners {
+                    actionPill("Run", tint: .green, textColor: .black,
+                               enabled: !runnersOnBase.isEmpty) { startScoringRun() }
+                }
                 menuPill
             }
             HStack(spacing: 8) {
@@ -1241,6 +1246,7 @@ struct LiveGameView: View {
         }
         pushUndo()                              // snapshot the pre-play state for Undo
         game.lastPlayInheritedCharges = []
+        game.lastPlayUnearnedRuns = 0
         animatingPlay = true                    // blocks the pad while the beats play out
 
         let forcedBase = min(secondOutBase + 1, 2)
@@ -1391,6 +1397,7 @@ struct LiveGameView: View {
         // One undo snapshot covers the whole play (record + every runner placement/score).
         pushUndo()
         game.lastPlayInheritedCharges = []   // this path resolves outside `perform`
+        game.lastPlayUnearnedRuns = 0
         pendingPlay = draft
         game.record(outcome, resolveBasesExternally: true)  // stats/outs/order only — no base moves
         startHitResolution(batter: batter, baseCount: baseCount, hitNoun: hitNoun(outcome))
@@ -1402,6 +1409,7 @@ struct LiveGameView: View {
     private func recordHomeRun(draft: PlayDraft) {
         pushUndo()
         game.lastPlayInheritedCharges = []
+        game.lastPlayUnearnedRuns = 0
         pendingPlay = draft
         guard let batter = game.currentBatterLine?.player else {
             game.record(.homeRun); finishPlay(); return
@@ -1426,6 +1434,7 @@ struct LiveGameView: View {
     private func recordSacFly(draft: PlayDraft) {
         pushUndo()
         game.lastPlayInheritedCharges = []
+        game.lastPlayUnearnedRuns = 0
         pendingPlay = draft
         guard let scorer = game.runner(onBase: 2) else {   // no one on third — just record it
             game.record(.sacrificeFly); finishPlay(); return
@@ -1729,6 +1738,7 @@ struct LiveGameView: View {
                          pitcher: draft.pitcher,
                          detail: draft.strikeoutPitch ?? "",   // names the strikeout pitch, if tracked
                          runsScored: drovein,
+                         unearnedRuns: game.lastPlayUnearnedRuns,   // reached-on-error runs (rule 9.16)
                          inning: draft.inning,
                          isTop: draft.isTop,
                          outs: draft.outs,
@@ -1774,6 +1784,7 @@ struct LiveGameView: View {
     private func perform(_ action: () -> Void) {
         pushUndo()
         game.lastPlayInheritedCharges = []   // per-play scratch; finishPlay reads what this play adds
+        game.lastPlayUnearnedRuns = 0
         action()
         finishPlay()
     }
@@ -1783,6 +1794,7 @@ struct LiveGameView: View {
     /// strikeout/walk into the pitch's own single Undo step, so Undo lands just before that pitch.
     private func performContinuing(_ action: () -> Void) {
         game.lastPlayInheritedCharges = []
+        game.lastPlayUnearnedRuns = 0
         action()
         finishPlay()
     }

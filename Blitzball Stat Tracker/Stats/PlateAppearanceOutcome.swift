@@ -126,6 +126,18 @@ public enum PlateAppearanceOutcome: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The batter reached base ONLY because of a fielding error — he'd have been out on clean play.
+    /// Under rule 9.16 such a batter is erased in the earned-run reconstruction, so ANY run he later
+    /// scores is unearned. This is deliberately NARROWER than `chargesError`: the "advanced on error"
+    /// variants (a real hit where an error only added bases) are excluded, because whether their run
+    /// is unearned depends on a full reconstruction and is left to the manual Edit Play flow.
+    public var batterReachedOnError: Bool {
+        switch self {
+        case .reachedOnError, .reachedOnTwoBaseError, .reachedOnThreeBaseError: return true
+        default: return false
+        }
+    }
+
     /// Reached base on a misplay rather than clean contact — an error or a fielder's choice. The play
     /// summary uses this to name the fielder inline ("reaches on an error by the shortstop").
     public var isReachedOnMisplay: Bool {

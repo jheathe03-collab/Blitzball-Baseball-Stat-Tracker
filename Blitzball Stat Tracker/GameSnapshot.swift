@@ -46,6 +46,8 @@ struct GameSnapshot {
     var awayPitcher: Player?
     /// Who was on the hook for each runner on base (runner name → pitcher name).
     var runnerResponsibility: [String: String]
+    /// On-base runners who reached on an error, so undoing keeps their runs correctly unearned.
+    var reachedOnErrorRunners: Set<String>
     /// The play log exactly as it stood. A value copy rather than a high-water mark, because Redo
     /// has to PUT BACK entries that Undo removed — restoring reconciles both directions.
     var playRecords: [PlayRecord]
@@ -149,6 +151,7 @@ extension Game {
             homePitcher: homePitcher,
             awayPitcher: awayPitcher,
             runnerResponsibility: runnerResponsibility,
+            reachedOnErrorRunners: reachedOnErrorRunners,
             playRecords: plays.map(GameSnapshot.PlayRecord.init),
             lines: lines
         )
@@ -203,6 +206,7 @@ extension Game {
         homePitcher = snapshot.homePitcher
         awayPitcher = snapshot.awayPitcher
         runnerResponsibility = snapshot.runnerResponsibility
+        reachedOnErrorRunners = snapshot.reachedOnErrorRunners
         for line in statLines {
             if let saved = snapshot.lines[line.persistentModelID] {
                 line.batting = saved.batting

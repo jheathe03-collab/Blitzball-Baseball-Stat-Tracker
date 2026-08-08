@@ -143,9 +143,21 @@ final class Game {
     /// by name to match how the archives serialize runners. Defaulted so old stores migrate as-is.
     var runnerResponsibilityData: Data = Data()
 
+    /// Names of runners currently on base who reached ONLY because of an error (rule 9.16). A run
+    /// scored by one of them is unearned — it counts as a run allowed but not against the pitcher's
+    /// ERA. JSON blob keyed by name, mirroring `runnerResponsibility`. Defaulted so old stores
+    /// migrate as-is. NOTE: this auto-detects the "reached on error" case only; runs that are
+    /// unearned because an error prolonged the inning are still handled via the manual Edit Play flow.
+    var reachedOnErrorRunnersData: Data = Data()
+
     /// Runs charged to a pitcher OTHER than the one currently pitching, collected during the play
     /// being resolved so the live screen can confirm them. Not persisted — it's per-play scratch.
     @Transient var lastPlayInheritedCharges: [InheritedCharge] = []
+
+    /// How many of THIS play's runs were unearned (a reached-on-error runner came around to score),
+    /// so the play-log entry records it. Reset at the start of every play, read when the play is
+    /// logged. Not persisted — per-play scratch, same lifecycle as `lastPlayInheritedCharges`.
+    @Transient var lastPlayUnearnedRuns: Int = 0
 
     /// Every player's stat line for this game. Deleting the game deletes its lines (cascade).
     @Relationship(deleteRule: .cascade, inverse: \GameStatLine.game) var statLines: [GameStatLine] = []
@@ -188,6 +200,12 @@ extension Game {
     var runnerResponsibility: [String: String] {
         get { BlobCoder.decode(runnerResponsibilityData) ?? [:] }
         set { runnerResponsibilityData = BlobCoder.encode(newValue) }
+    }
+
+    /// Names of on-base runners who reached on an error (their runs are unearned), from its blob.
+    var reachedOnErrorRunners: Set<String> {
+        get { BlobCoder.decode(reachedOnErrorRunnersData) ?? [] }
+        set { reachedOnErrorRunnersData = BlobCoder.encode(newValue) }
     }
 
     /// Scoreboard run totals, summed from the per-inning arrays.

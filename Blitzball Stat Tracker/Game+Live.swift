@@ -271,6 +271,9 @@ extension Game {
                     ? BaseRunning.advanceOnHit(bases: runnerTokens, batter: 3, baseCount: baseCount)
                     : BaseRunning.advanceForcedHit(bases: runnerTokens, batter: 3, baseCount: baseCount)
                 applyAdvance(advance, batter: batter, batterPlayer: batterPlayer)
+                // A batter who reached only on an error scores an unearned run if he comes around
+                // (rule 9.16) — remember him so creditRunToPitcher keeps that run off the pitcher's ERA.
+                if outcome.batterReachedOnError { markReachedOnError(batterPlayer) }
             }
         }
         }
@@ -369,6 +372,15 @@ extension Game {
         if outs >= settings.outsPerInning && !isComplete { advanceHalfInning() }
     }
 
+    /// MLB rule 5.08(a): a run does NOT score when the play's inning-ending out is a force out or
+    /// the batter-runner is retired before reaching first base. The multi-out finishers below make
+    /// exactly those kinds of outs, so each asks this before crediting a forced/driven-in run —
+    /// if the outs recorded on THIS play reach the inning limit, the run is voided. `outs` here is
+    /// the count BEFORE this play's outs are applied.
+    private func playMakesFinalOut(addingOuts n: Int) -> Bool {
+        outs + n >= settings.outsPerInning
+    }
+
     /// Resolve a forced double play once the trot has played out: the batter is out at first, and
     /// `runnersLeadFirst[outIndex]` (lead runner first, highest base) is the second out. Every other
     /// runner is credited one base — scoring if that base is home (index 3), no RBI since the batter hit
@@ -380,11 +392,19 @@ extension Game {
         batterLine.batting.record(.out)                   // the batter, out at first
         activePitcherLine?.pitching.recordAllowed(.out)
 
+        // Both outs (batter at first + a forced runner) are 5.08(a) exceptions, so if this DP is the
+        // third out no forced runner's run counts.
+        let voidsRun = playMakesFinalOut(addingOuts: 2)
+
         for r in runnersLeadFirst { setRunner(nil, onBase: r.base) }   // clear the starting bases
 
         for (i, r) in runnersLeadFirst.enumerated() where i != outIndex {
             let dest = r.base + 1
-            if dest >= 3 { scoreRun(by: r.player) } else { setRunner(r.player, onBase: dest) }
+            if dest >= 3 {
+                if !voidsRun { scoreRun(by: r.player) }   // 5.08(a): no run when the DP is the 3rd out
+            } else {
+                setRunner(r.player, onBase: dest)
+            }
         }
 
         outs += 2
@@ -423,11 +443,15 @@ extension Game {
         let onFirst = runnerFirst, onSecond = runnerSecond, onThird = runnerThird
         runnerFirst = nil; runnerSecond = nil; runnerThird = nil
 
+        // The batter is out at first; if that's the inning's third out, rule 5.08(a)(1) (batter-runner
+        // retired before first base) voids any run on the play — even a runner who "beat the throw" home.
+        let batterOutEndsInning = playMakesFinalOut(addingOuts: 1)
+
         var outsOnPlay = 1                                 // the batter
         if let third = onThird {
             if runnerHomeSafe == false {
                 outsOnPlay += 1                            // thrown out at home
-            } else if runnerHomeSafe == true {
+            } else if runnerHomeSafe == true && !batterOutEndsInning {
                 scoreRun(by: third)                        // safe — the run counts, RBI to the batter
                 batterLine.batting.rbi += 1
             }
@@ -469,11 +493,15 @@ extension Game {
                               runnerThird != nil ? 2 : nil]
 
         // The runner the defense retired is gone before the batter forces anyone.
+        var forceOutEndsInning = false
         if runnerOut, let base = playedOnBase {
             tokens[base] = nil
             outs += 1
             activePitcherLine?.pitching.outsRecorded += 1
             if battingIsHome { awayPitcherOuts += 1 } else { homePitcherOuts += 1 }
+            // The fielder's-choice out is a force out; if it's the third out, 5.08(a) voids any
+            // run forced in on the play.
+            forceOutEndsInning = outs >= settings.outsPerInning
         }
 
         let result = BaseRunning.advanceForcedHit(bases: tokens, batter: 3, baseCount: baseCount)
@@ -484,8 +512,10 @@ extension Game {
             default:      return nil
             }
         }
-        for token in result.scored { if let scorer = player(for: token) { scoreRun(by: scorer) } }
-        batter.batting.rbi += result.scored.count
+        if !forceOutEndsInning {
+            for token in result.scored { if let scorer = player(for: token) { scoreRun(by: scorer) } }
+            batter.batting.rbi += result.scored.count
+        }
         runnerFirst  = result.bases[0].flatMap(player(for:))
         runnerSecond = result.bases[1].flatMap(player(for:))
         runnerThird  = result.bases[2].flatMap(player(for:))
@@ -588,7 +618,13 @@ extension Game {
         let responsibleName = runnerResponsibility[runner.name]
         let line = responsibleName.flatMap(pitcherLine(named:)) ?? activePitcherLine
         line?.pitching.runsAllowed += 1
-        line?.pitching.earnedRuns += 1
+        // A run is unearned when its runner reached base on an error (rule 9.16): it still counts
+        // as a run allowed but not against ERA. Everything else defaults to earned.
+        if reachedOnErrorRunners.contains(runner.name) {
+            lastPlayUnearnedRuns += 1
+        } else {
+            line?.pitching.earnedRuns += 1
+        }
 
         // Flag it for the live screen when the run went to someone other than the current pitcher.
         if let responsibleName, responsibleName != activePitcher?.name, line != nil {
@@ -598,6 +634,7 @@ extension Game {
         }
         // He's home — a later trip to the plate this inning starts fresh against whoever is pitching.
         clearResponsibility(for: runner)
+        clearReachedOnError(for: runner)
     }
 
     /// The fielding side's stat line for a pitcher, by name (mirrors `activePitcherLine`'s matching).
@@ -628,6 +665,7 @@ extension Game {
         pitcher: Player? = nil,
         detail: String = "",
         runsScored: Int = 0,
+        unearnedRuns: Int = 0,
         inning: Int? = nil,
         isTop: Bool? = nil,
         outs: Int? = nil,
@@ -652,6 +690,7 @@ extension Game {
             homeScore: homeScore,
             awayScore: awayScore
         )
+        event.unearnedRuns = min(unearnedRuns, runsScored)   // can't be more unearned than scored
         context?.insert(event)
         plays.append(event)
         return event
@@ -689,15 +728,33 @@ extension Game {
     /// Hand a runner's tab to someone else — used when a pinch runner takes over the base.
     func transferResponsibility(from old: Player, to new: Player) {
         var map = runnerResponsibility
-        guard let pitcherName = map.removeValue(forKey: old.name) else { return }
-        map[new.name] = pitcherName
-        runnerResponsibility = map
+        if let pitcherName = map.removeValue(forKey: old.name) {
+            map[new.name] = pitcherName
+            runnerResponsibility = map
+        }
+        // A pinch runner inherits the reached-on-error status too — the run stays unearned.
+        var errored = reachedOnErrorRunners
+        if errored.remove(old.name) != nil {
+            errored.insert(new.name)
+            reachedOnErrorRunners = errored
+        }
     }
 
     private func clearResponsibility(for runner: Player) {
         var map = runnerResponsibility
         guard map.removeValue(forKey: runner.name) != nil else { return }
         runnerResponsibility = map
+    }
+
+    /// Remember a runner reached base on an error — a run he scores is unearned (rule 9.16).
+    private func markReachedOnError(_ player: Player) {
+        var set = reachedOnErrorRunners
+        if set.insert(player.name).inserted { reachedOnErrorRunners = set }
+    }
+
+    private func clearReachedOnError(for player: Player) {
+        var set = reachedOnErrorRunners
+        if set.remove(player.name) != nil { reachedOnErrorRunners = set }
     }
 
     // MARK: - Innings
@@ -708,8 +765,10 @@ extension Game {
         runnerFirst = nil
         runnerSecond = nil
         runnerThird = nil
-        // Nobody is left on base, so no pitcher is on the hook for anyone.
+        // Nobody is left on base, so no pitcher is on the hook for anyone and no reached-on-error
+        // runners remain to carry an unearned run into the next inning.
         runnerResponsibility = [:]
+        reachedOnErrorRunners = []
         if isTopInning {
             isTopInning = false
         } else {
